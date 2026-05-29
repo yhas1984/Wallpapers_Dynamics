@@ -67,11 +67,11 @@ class TitleBar(QWidget):
 
     def mousePressEvent(self, e):
         if e.button() == Qt.MouseButton.LeftButton:
-            self._drag_pos = e.globalPos() - self.window().pos()
+            self._drag_pos = e.globalPosition().toPoint() - self.window().pos()
 
     def mouseMoveEvent(self, e):
         if self._drag_pos and e.buttons() == Qt.MouseButton.LeftButton:
-            self.window().move(e.globalPos() - self._drag_pos)
+            self.window().move(e.globalPosition().toPoint() - self._drag_pos)
 
     def mouseReleaseEvent(self, e):
         self._drag_pos = None
