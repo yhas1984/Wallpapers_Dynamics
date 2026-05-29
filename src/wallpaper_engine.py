@@ -32,9 +32,8 @@ GSETTINGS_KEY = "background-uris"
 
 
 class WallpaperEngine:
-    def __init__(self, desktop="unknown", init_window=True, icon_mode=False):
+    def __init__(self, desktop="unknown", init_window=True):
         self._desktop = desktop
-        self._icon_mode = icon_mode
         self._window = None
         self._mpv_process = None
         self._current_video = None
@@ -115,48 +114,16 @@ class WallpaperEngine:
             "NAME": self._display.intern_atom("_NET_WM_NAME"),
         }
 
-        if self._icon_mode:
-            win.change_property(atoms["STATE"], Xatom.ATOM, 32, [
-                atoms["BELOW"], atoms["STICKY"], atoms["SKIP_P"], atoms["SKIP_T"],
-            ])
-            win.change_property(atoms["NAME"], Xatom.STRING, 8, b"WallpaperDinamicos")
-        else:
-            win.change_property(atoms["TYPE"], Xatom.ATOM, 32, [atoms["DESKTOP"]])
-            win.change_property(atoms["STATE"], Xatom.ATOM, 32, [
-                atoms["BELOW"], atoms["STICKY"], atoms["SKIP_P"], atoms["SKIP_T"],
-            ])
-            win.change_property(atoms["DESKTOP_ID"], Xatom.CARDINAL, 32, [0xFFFFFFFF])
-            win.change_property(atoms["NAME"], Xatom.STRING, 8, b"WallpaperDinamicos")
+        win.change_property(atoms["TYPE"], Xatom.ATOM, 32, [atoms["DESKTOP"]])
+        win.change_property(atoms["STATE"], Xatom.ATOM, 32, [
+            atoms["BELOW"], atoms["STICKY"], atoms["SKIP_P"], atoms["SKIP_T"],
+        ])
+        win.change_property(atoms["DESKTOP_ID"], Xatom.CARDINAL, 32, [0xFFFFFFFF])
+        win.change_property(atoms["NAME"], Xatom.STRING, 8, b"WallpaperDinamicos")
 
         win.map()
         self._display.sync()
         time.sleep(0.3)
-
-        if self._icon_mode:
-            desktop_win = self._find_desktop_window()
-            if desktop_win:
-                try:
-                    desk_frame = desktop_win
-                    while True:
-                        p = desk_frame.query_tree().parent
-                        if not p or p.id == self._root.id:
-                            break
-                        desk_frame = p
-                except Exception:
-                    desk_frame = None
-                if desk_frame and desk_frame.id != win.id:
-                    restack = self._display.intern_atom("_NET_RESTACK_WINDOW")
-                    ev = xevent.ClientMessage(
-                        display=self._display,
-                        window=win,
-                        client_type=restack,
-                        data=(32, [2, desk_frame.id, 1, 0, 0]),
-                    )
-                    mask = X.SubstructureRedirectMask | X.SubstructureNotifyMask
-                    self._root.send_event(ev, event_mask=mask)
-                    self._display.sync()
-            self._window = win
-            return
 
         our_frame = win
         try:
