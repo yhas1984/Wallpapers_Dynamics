@@ -435,6 +435,7 @@ class FrameWallpaperEngine:
 
     def __init__(self):
         self._running = False
+        self._last_uri = None
         self._timer = None
         self._ffmpeg_proc = None
         self._ffmpeg_checker = None
@@ -591,6 +592,9 @@ class FrameWallpaperEngine:
         self._skip = 5
 
         uri = f"file://{path}"
+        if uri == self._last_uri:
+            return
+        self._last_uri = uri
         print(f"[WP] SET wallpaper {uri}")
         try:
             subprocess.run(
@@ -623,6 +627,7 @@ class FrameWallpaperEngine:
     def stop(self, skip_restore=False):
         print(f"[WP] stop(skip_restore={skip_restore})")
         self._running = False
+        self._last_uri = None
         if self._ffmpeg_checker:
             self._ffmpeg_checker.stop()
             self._ffmpeg_checker = None

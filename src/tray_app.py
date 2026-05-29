@@ -187,6 +187,10 @@ class WallpaperGUI(QWidget):
         return self._frame_engine if self._use_frame_engine else self._wp_engine
 
     def _switch_engine_mode(self, use_frame):
+        if use_frame == self._use_frame_engine:
+            print(f"[WP] _switch_engine_mode({use_frame}) - ya en ese modo, ignorado")
+            return
+        print(f"[WP] _switch_engine_mode({use_frame}) - cambiando modo")
         current_video = self._current_video
 
         self._wp_engine.stop()
