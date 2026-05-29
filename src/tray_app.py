@@ -603,7 +603,9 @@ class WallpaperGUI(QWidget):
 
         if self.env["desktop"] == "deepin":
             self.icons_cb = QCheckBox("Mostrar iconos (experimental)")
+            self.icons_cb.blockSignals(True)
             self.icons_cb.setChecked(self._use_frame_engine)
+            self.icons_cb.blockSignals(False)
             self.icons_cb.toggled.connect(self._on_icons_toggled)
             cl.addWidget(self.icons_cb)
 

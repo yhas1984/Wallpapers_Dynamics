@@ -602,6 +602,14 @@ class FrameWallpaperEngine:
             pass
         try:
             subprocess.run(
+                ["gsettings", "set", GSETTINGS_SCHEMA, "wallpaper-uris",
+                 f"['{uri}']"],
+                capture_output=True, timeout=1,
+            )
+        except Exception:
+            pass
+        try:
+            subprocess.run(
                 ["dbus-send", "--session", "--dest=org.deepin.dde.Appearance1",
                  "--type=method_call", "--print-reply",
                  "/org/deepin/dde/Appearance1",
