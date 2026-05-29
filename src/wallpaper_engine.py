@@ -202,7 +202,8 @@ class WallpaperEngine:
             sock.close()
             self._ipc_ready = True
             return True
-        except Exception:
+        except Exception as e:
+            print(f"IPC error: {e}")
             return False
 
     def start(self, video_path, fps=None, **kwargs):
@@ -247,7 +248,7 @@ class WallpaperEngine:
         cmd.extend(mode_args)
 
         if blur > 0:
-            cmd.append(f"--vf=lavfi=boxblur={blur}:{blur}")
+            cmd.append(f"--vf=boxblur={blur}:{blur}")
 
         cmd.append(video_path)
 
@@ -340,9 +341,9 @@ class WallpaperEngine:
         self._filters["blur"] = val
         if self.is_running:
             if val > 0:
-                self._send_ipc_command(["vf", "set", f"lavfi=boxblur={val}:{val}"])
+                self._send_ipc_command(["set_property", "vf", f"boxblur={val}:{val}"])
             else:
-                self._send_ipc_command(["vf", "clr"])
+                self._send_ipc_command(["set_property", "vf", ""])
 
     def update_filters(self, filters):
         needs_restart = False
