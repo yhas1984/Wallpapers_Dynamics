@@ -466,17 +466,6 @@ class FrameWallpaperEngine:
         for f in self._frame_dir.iterdir():
             f.unlink(missing_ok=True)
 
-        first_frame = str(self._frame_dir / "frame_1.jpg")
-        print(f"[WP] extrayendo primer frame...")
-        try:
-            subprocess.run(
-                ["ffmpeg", "-y", "-i", video_path, "-vf", f"fps={fps}",
-                 "-vframes", "1", "-q:v", "5", first_frame],
-                capture_output=True, timeout=10,
-            )
-        except Exception:
-            pass
-
         output_pattern = str(self._frame_dir / "frame_%d.jpg")
         cmd = [
             "ffmpeg",
@@ -489,7 +478,7 @@ class FrameWallpaperEngine:
             self._ffmpeg_proc = subprocess.Popen(
                 cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
-            print(f"[WP] ffmpeg extraccion async iniciada (PID {self._ffmpeg_proc.pid})")
+            print(f"[WP] ffmpeg iniciado (PID {self._ffmpeg_proc.pid})")
         except Exception as e:
             print(f"[WP] Error al iniciar ffmpeg: {e}")
             return False
@@ -497,17 +486,7 @@ class FrameWallpaperEngine:
         from PyQt6.QtCore import QTimer
         self._ffmpeg_checker = QTimer()
         self._ffmpeg_checker.timeout.connect(self._on_ffmpeg_check)
-        self._ffmpeg_checker.start(100)
-
-        first = Path(first_frame)
-        if first.exists() and first.stat().st_size > 0:
-            print(f"[WP] primer frame OK ({first.stat().st_size} bytes)")
-            self._set_wallpaper(first)
-            self._frames = [first]
-            self._running = True
-            self._tick()
-        else:
-            print("[WP] primer frame NO generado")
+        self._ffmpeg_checker.start(50)
         return True
 
     def _tick(self):
@@ -526,41 +505,64 @@ class FrameWallpaperEngine:
             pass
 
     def _on_ffmpeg_check(self):
-        if self._ffmpeg_proc and self._ffmpeg_proc.poll() is None:
-            return
-        if self._ffmpeg_checker:
-            self._ffmpeg_checker.stop()
-            self._ffmpeg_checker = None
-
+        done = False
         if self._ffmpeg_proc:
-            try:
-                self._ffmpeg_proc.wait(timeout=5)
-            except Exception:
-                self._ffmpeg_proc.kill()
-                self._ffmpeg_proc.wait()
-            self._ffmpeg_proc = None
+            if self._ffmpeg_proc.poll() is not None:
+                try:
+                    self._ffmpeg_proc.wait(timeout=5)
+                except Exception:
+                    self._ffmpeg_proc.kill()
+                    self._ffmpeg_proc.wait()
+                self._ffmpeg_proc = None
+                done = True
 
-        all_frames = sorted(
-            self._frame_dir.glob("frame_*.jpg"),
-            key=lambda p: int(p.stem.split("_")[1]),
-        )
-        print(f"[WP] extraccion completa: {len(all_frames)} frames")
-        if len(all_frames) > self.MAX_FRAMES:
-            keep = all_frames[::len(all_frames) // self.MAX_FRAMES + 1]
-            for old in all_frames:
-                if old not in keep:
-                    old.unlink(missing_ok=True)
-            all_frames = keep
-            print(f"[WP] reducido a {len(all_frames)} frames")
+        if not self._running:
+            first = self._frame_dir / "frame_1.jpg"
+            if first.exists() and first.stat().st_size > 0:
+                print(f"[WP] primer frame disponible ({first.stat().st_size} bytes)")
+                self._set_wallpaper(first)
+                self._frames = [first]
+                self._running = True
+                self._tick()
 
-        if all_frames:
-            self._frames = all_frames
-        else:
-            print("[WP] No se generaron frames")
-            return
-
-        if self._on_complete:
-            self._on_complete()
+        if done and self._frames:
+            all_frames = sorted(
+                self._frame_dir.glob("frame_*.jpg"),
+                key=lambda p: int(p.stem.split("_")[1]),
+            )
+            print(f"[WP] extraccion completa: {len(all_frames)} frames")
+            if len(all_frames) > self.MAX_FRAMES:
+                keep = all_frames[::len(all_frames) // self.MAX_FRAMES + 1]
+                for old in all_frames:
+                    if old not in keep:
+                        old.unlink(missing_ok=True)
+                all_frames = keep
+                print(f"[WP] reducido a {len(all_frames)} frames")
+            if all_frames:
+                self._frames = all_frames
+            else:
+                print("[WP] No se generaron frames")
+                return
+            if self._ffmpeg_checker:
+                self._ffmpeg_checker.stop()
+                self._ffmpeg_checker = None
+            if self._on_complete:
+                self._on_complete()
+        elif done and not self._frames:
+            all_frames = sorted(
+                self._frame_dir.glob("frame_*.jpg"),
+                key=lambda p: int(p.stem.split("_")[1]),
+            )
+            if all_frames:
+                first = all_frames[0]
+                print(f"[WP] primer frame de batch ({first.stat().st_size} bytes)")
+                self._set_wallpaper(first)
+                self._frames = all_frames
+                self._running = True
+                self._tick()
+            if self._ffmpeg_checker:
+                self._ffmpeg_checker.stop()
+                self._ffmpeg_checker = None
 
     def _update_loop(self):
         import time as _time
