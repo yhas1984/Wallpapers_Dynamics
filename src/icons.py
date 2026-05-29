@@ -1,10 +1,10 @@
-from PyQt5.QtGui import QIcon, QPixmap, QPainter, QColor, QPen, QBrush
-from PyQt5.QtCore import Qt, QRect, QPointF
+from PyQt6.QtGui import QIcon, QPixmap, QPainter, QColor, QPen, QBrush
+from PyQt6.QtCore import Qt, QRect, QPointF
 
 
 def _pixmap(size, draw_func):
     pixmap = QPixmap(size, size)
-    pixmap.fill(Qt.transparent)
+    pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
     painter.setRenderHint(QPainter.Antialiasing)
     draw_func(painter, size)
@@ -14,7 +14,7 @@ def _pixmap(size, draw_func):
 
 def icon_folder(size=24):
     def draw(p, s):
-        p.setPen(Qt.NoPen)
+        p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor("#FFD93D"))
         p.drawRoundedRect(int(s*0.1), int(s*0.25), int(s*0.8), int(s*0.6), s*0.08, s*0.08)
         p.setBrush(QColor("#FFC107"))
@@ -24,7 +24,7 @@ def icon_folder(size=24):
 
 def icon_play(size=24):
     def draw(p, s):
-        p.setPen(Qt.NoPen)
+        p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor("#4CAF50"))
         p.drawEllipse(int(s*0.05), int(s*0.05), int(s*0.9), int(s*0.9))
         p.setBrush(QColor("white"))
@@ -34,7 +34,7 @@ def icon_play(size=24):
 
 def icon_pause(size=24):
     def draw(p, s):
-        p.setPen(Qt.NoPen)
+        p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor("#FF9800"))
         p.drawEllipse(int(s*0.05), int(s*0.05), int(s*0.9), int(s*0.9))
         p.setBrush(QColor("white"))
@@ -46,7 +46,7 @@ def icon_pause(size=24):
 
 def icon_stop(size=24):
     def draw(p, s):
-        p.setPen(Qt.NoPen)
+        p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor("#f44336"))
         p.drawEllipse(int(s*0.05), int(s*0.05), int(s*0.9), int(s*0.9))
         p.setBrush(QColor("white"))
@@ -57,7 +57,7 @@ def icon_stop(size=24):
 
 def icon_mute(size=24):
     def draw(p, s):
-        p.setPen(Qt.NoPen)
+        p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor("#9E9E9E"))
         p.drawEllipse(int(s*0.05), int(s*0.05), int(s*0.9), int(s*0.9))
         p.setBrush(QColor("white"))
@@ -70,7 +70,7 @@ def icon_mute(size=24):
 
 def icon_sound(size=24):
     def draw(p, s):
-        p.setPen(Qt.NoPen)
+        p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor("#2196F3"))
         p.drawEllipse(int(s*0.05), int(s*0.05), int(s*0.9), int(s*0.9))
         p.setBrush(QColor("white"))
@@ -83,7 +83,7 @@ def icon_sound(size=24):
 
 def icon_reset(size=24):
     def draw(p, s):
-        p.setPen(Qt.NoPen)
+        p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor("#795548"))
         p.drawEllipse(int(s*0.05), int(s*0.05), int(s*0.9), int(s*0.9))
         p.setPen(QPen(QColor("white"), s*0.06))
@@ -114,7 +114,7 @@ def icon_app(size=48):
     def draw(p, s):
         gradient = p
         p.setBrush(QColor("#6495ED"))
-        p.setPen(Qt.NoPen)
+        p.setPen(Qt.PenStyle.NoPen)
         m = s * 0.08
         p.drawRoundedRect(int(m), int(m), int(s-m*2), int(s-m*2), s*0.2, s*0.2)
         p.setBrush(QColor("white"))
@@ -124,7 +124,7 @@ def icon_app(size=48):
 
 def icon_led_active(size=12):
     def draw(p, s):
-        p.setPen(Qt.NoPen)
+        p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor("#4CAF50"))
         p.drawEllipse(1, 1, int(s-2), int(s-2))
         p.setBrush(QColor(255, 255, 255, 100))
@@ -134,7 +134,7 @@ def icon_led_active(size=12):
 
 def icon_led_inactive(size=12):
     def draw(p, s):
-        p.setPen(Qt.NoPen)
+        p.setPen(Qt.PenStyle.NoPen)
         p.setBrush(QColor("#f44336"))
         p.drawEllipse(1, 1, int(s-2), int(s-2))
         p.setBrush(QColor(255, 255, 255, 100))

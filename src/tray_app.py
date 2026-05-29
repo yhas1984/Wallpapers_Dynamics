@@ -1,18 +1,19 @@
 import sys
 import os
 from pathlib import Path
-from PyQt5.QtWidgets import (
+from PyQt6.QtWidgets import (
     QApplication, QWidget, QVBoxLayout, QHBoxLayout,
     QLabel, QPushButton, QFrame, QSlider, QCheckBox,
     QFileDialog, QSystemTrayIcon, QComboBox, QListWidget,
-    QListWidgetItem, QAbstractItemView, QMenu, QShortcut,
+    QListWidgetItem, QAbstractItemView, QMenu,
     QSpinBox, QStyle, QScrollArea, QMessageBox,
 )
-from PyQt5.QtGui import (
+from PyQt6.QtGui import (
     QIcon, QPixmap, QPainter, QColor, QPalette,
     QKeySequence, QDragEnterEvent, QDropEvent, QFont,
+    QShortcut,
 )
-from PyQt5.QtCore import Qt, QTimer, QSize, QUrl
+from PyQt6.QtCore import Qt, QTimer, QSize, QUrl
 from .wallpaper_engine import WallpaperEngine, FrameWallpaperEngine, PLAYBACK_MODES
 from . import load_config, save_config
 from . import icons
@@ -47,14 +48,14 @@ class TitleBar(QWidget):
         layout.addWidget(self.info_label)
 
         btn_min = QPushButton()
-        btn_min.setIcon(self.style().standardIcon(QStyle.SP_TitleBarMinButton))
+        btn_min.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarMinButton))
         btn_min.setFixedSize(24, 24)
         btn_min.setFlat(True)
         btn_min.clicked.connect(lambda: self.window().showMinimized())
         layout.addWidget(btn_min)
 
         btn_close = QPushButton()
-        btn_close.setIcon(self.style().standardIcon(QStyle.SP_TitleBarCloseButton))
+        btn_close.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_TitleBarCloseButton))
         btn_close.setFixedSize(24, 24)
         btn_close.setFlat(True)
         btn_close.clicked.connect(self.window().close)
@@ -63,11 +64,11 @@ class TitleBar(QWidget):
         self.setLayout(layout)
 
     def mousePressEvent(self, e):
-        if e.button() == Qt.LeftButton:
+        if e.button() == Qt.MouseButton.LeftButton:
             self._drag_pos = e.globalPos() - self.window().pos()
 
     def mouseMoveEvent(self, e):
-        if self._drag_pos and e.buttons() == Qt.LeftButton:
+        if self._drag_pos and e.buttons() == Qt.MouseButton.LeftButton:
             self.window().move(e.globalPos() - self._drag_pos)
 
     def mouseReleaseEvent(self, e):
@@ -87,8 +88,8 @@ class ThumbnailWidget(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(260, 145)
-        self.setFrameShape(QFrame.Box)
-        self.setAlignment(Qt.AlignCenter)
+        self.setFrameShape(QFrame.Shape.Box)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.setText("Sin preview")
 
     def set_video(self, path):
@@ -138,7 +139,7 @@ class WallpaperGUI(QWidget):
         self.setMinimumSize(300, 520)
         self.setMaximumSize(400, 720)
         self.resize(320, 580)
-        self.setWindowFlags(Qt.FramelessWindowHint)
+        self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setAutoFillBackground(True)
 
         self._fix_palette()
@@ -189,21 +190,21 @@ class WallpaperGUI(QWidget):
     def _fix_palette(self):
         pal = QApplication.palette()
         if self.env["dark_mode"]:
-            pal.setColor(QPalette.Window, QColor(self.env["bg_color"]))
-            pal.setColor(QPalette.Base, QColor("#1f2326"))
-            pal.setColor(QPalette.Text, QColor(self.env["fg_color"]))
-            pal.setColor(QPalette.WindowText, QColor(self.env["fg_color"]))
-            pal.setColor(QPalette.Button, QColor(self.env["bg_color"]))
-            pal.setColor(QPalette.ButtonText, QColor(self.env["fg_color"]))
+            pal.setColor(QPalette.ColorRole.Window, QColor(self.env["bg_color"]))
+            pal.setColor(QPalette.ColorRole.Base, QColor("#1f2326"))
+            pal.setColor(QPalette.ColorRole.Text, QColor(self.env["fg_color"]))
+            pal.setColor(QPalette.ColorRole.WindowText, QColor(self.env["fg_color"]))
+            pal.setColor(QPalette.ColorRole.Button, QColor(self.env["bg_color"]))
+            pal.setColor(QPalette.ColorRole.ButtonText, QColor(self.env["fg_color"]))
             pal.setColor(QPalette.Highlight, QColor(self.env["accent_color"]))
             pal.setColor(QPalette.HighlightedText, QColor("white"))
         else:
-            pal.setColor(QPalette.Window, QColor(self.env["bg_color"]))
-            pal.setColor(QPalette.Base, QColor("#ffffff"))
-            pal.setColor(QPalette.Text, QColor(self.env["fg_color"]))
-            pal.setColor(QPalette.WindowText, QColor(self.env["fg_color"]))
-            pal.setColor(QPalette.Button, QColor(self.env["bg_color"]))
-            pal.setColor(QPalette.ButtonText, QColor(self.env["fg_color"]))
+            pal.setColor(QPalette.ColorRole.Window, QColor(self.env["bg_color"]))
+            pal.setColor(QPalette.ColorRole.Base, QColor("#ffffff"))
+            pal.setColor(QPalette.ColorRole.Text, QColor(self.env["fg_color"]))
+            pal.setColor(QPalette.ColorRole.WindowText, QColor(self.env["fg_color"]))
+            pal.setColor(QPalette.ColorRole.Button, QColor(self.env["bg_color"]))
+            pal.setColor(QPalette.ColorRole.ButtonText, QColor(self.env["fg_color"]))
             pal.setColor(QPalette.Highlight, QColor(self.env["accent_color"]))
             pal.setColor(QPalette.HighlightedText, QColor("white"))
         QApplication.setPalette(pal)
@@ -219,7 +220,7 @@ class WallpaperGUI(QWidget):
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
-        scroll.setFrameShape(QFrame.NoFrame)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
         main_layout.addWidget(scroll)
 
         content = QWidget()
@@ -228,20 +229,20 @@ class WallpaperGUI(QWidget):
         cl.setSpacing(6)
 
         self.thumbnail = ThumbnailWidget()
-        cl.addWidget(self.thumbnail, alignment=Qt.AlignCenter)
+        cl.addWidget(self.thumbnail, alignment=Qt.AlignmentFlag.AlignCenter)
 
         self.video_label = QLabel("Arrastra un video o selecciona uno")
-        self.video_label.setAlignment(Qt.AlignCenter)
+        self.video_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.video_label.setWordWrap(True)
         cl.addWidget(self.video_label)
 
         self.video_info_label = QLabel("")
-        self.video_info_label.setAlignment(Qt.AlignCenter)
+        self.video_info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.video_info_label.setStyleSheet("color: gray; font-size: 10px;")
         cl.addWidget(self.video_info_label)
 
         self.playlist_label = QLabel("")
-        self.playlist_label.setAlignment(Qt.AlignCenter)
+        self.playlist_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         cl.addWidget(self.playlist_label)
 
         cl.addWidget(self._sep())
@@ -267,33 +268,33 @@ class WallpaperGUI(QWidget):
         self.playlist_widget.setMaximumHeight(90)
         self.playlist_widget.setSelectionMode(QAbstractItemView.SingleSelection)
         self.playlist_widget.itemDoubleClicked.connect(self._play_from_playlist)
-        self.playlist_widget.setContextMenuPolicy(Qt.CustomContextMenu)
+        self.playlist_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.playlist_widget.customContextMenuRequested.connect(self._playlist_context_menu)
         cl.addWidget(self.playlist_widget)
 
         ctrl_row = QHBoxLayout()
         self.btn_prev = QPushButton()
-        self.btn_prev.setIcon(self.style().standardIcon(QStyle.SP_MediaSkipBackward))
+        self.btn_prev.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaSkipBackward))
         self.btn_prev.setFixedSize(30, 30)
         self.btn_prev.clicked.connect(self._prev_video)
         ctrl_row.addWidget(self.btn_prev)
 
         self.btn_play = QPushButton()
-        self.btn_play.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
+        self.btn_play.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
         self.btn_play.setFixedSize(34, 34)
         self.btn_play.setEnabled(False)
         self.btn_play.clicked.connect(self._toggle_pause)
         ctrl_row.addWidget(self.btn_play)
 
         self.btn_stop = QPushButton()
-        self.btn_stop.setIcon(self.style().standardIcon(QStyle.SP_MediaStop))
+        self.btn_stop.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaStop))
         self.btn_stop.setFixedSize(30, 30)
         self.btn_stop.setEnabled(False)
         self.btn_stop.clicked.connect(self._stop)
         ctrl_row.addWidget(self.btn_stop)
 
         self.btn_next = QPushButton()
-        self.btn_next.setIcon(self.style().standardIcon(QStyle.SP_MediaSkipForward))
+        self.btn_next.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaSkipForward))
         self.btn_next.setFixedSize(30, 30)
         self.btn_next.clicked.connect(self._next_video)
         ctrl_row.addWidget(self.btn_next)
@@ -301,13 +302,13 @@ class WallpaperGUI(QWidget):
 
         vol_row = QHBoxLayout()
         self.btn_mute = QPushButton()
-        self.btn_mute.setIcon(self.style().standardIcon(QStyle.SP_MediaVolume))
+        self.btn_mute.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaVolume))
         self.btn_mute.setFixedSize(30, 30)
         self.btn_mute.setFlat(True)
         self.btn_mute.clicked.connect(self._toggle_mute)
         vol_row.addWidget(self.btn_mute)
 
-        self.volume_slider = QSlider(Qt.Horizontal)
+        self.volume_slider = QSlider(Qt.Orientation.Horizontal)
         self.volume_slider.setRange(0, 100)
         self.volume_slider.setValue(self.config.get("volume", 50))
         self.volume_slider.valueChanged.connect(self._on_volume)
@@ -398,8 +399,8 @@ class WallpaperGUI(QWidget):
 
     def _sep(self):
         sep = QFrame()
-        sep.setFrameShape(QFrame.HLine)
-        sep.setFrameShadow(QFrame.Sunken)
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setFrameShadow(QFrame.Shadow.Sunken)
         return sep
 
     def _make_slider(self, label_text, parent_layout, min_val, max_val, default, callback):
@@ -408,14 +409,14 @@ class WallpaperGUI(QWidget):
         label = QLabel(label_text)
         label.setFixedWidth(55)
         row.addWidget(label)
-        slider = QSlider(Qt.Horizontal)
+        slider = QSlider(Qt.Orientation.Horizontal)
         slider.setRange(min_val, max_val)
         slider.setValue(default)
         slider.valueChanged.connect(callback)
         row.addWidget(slider)
         val_label = QLabel(f"{default}")
         val_label.setFixedWidth(28)
-        val_label.setAlignment(Qt.AlignRight)
+        val_label.setAlignment(Qt.AlignmentFlag.AlignRight)
         row.addWidget(val_label)
         slider._val_label = val_label
         parent_layout.addLayout(row)
@@ -470,14 +471,14 @@ class WallpaperGUI(QWidget):
         for i, path in enumerate(self.config["playlist"]):
             name = os.path.basename(path)
             item = QListWidgetItem(f"{i+1}. {name}")
-            item.setData(Qt.UserRole, i)
+            item.setData(Qt.ItemDataRole.UserRole, i)
             self.playlist_widget.addItem(item)
         total = len(self.config["playlist"])
         idx = self.config.get("playlist_index", 0)
         self.playlist_label.setText(f"Playlist: {idx+1}/{total}" if total else "")
 
     def _play_from_playlist(self, item):
-        self._play_index(item.data(Qt.UserRole))
+        self._play_index(item.data(Qt.ItemDataRole.UserRole))
 
     def _play_index(self, idx):
         playlist = self.config["playlist"]
@@ -492,7 +493,7 @@ class WallpaperGUI(QWidget):
                 self._is_paused = False
                 self.btn_play.setEnabled(not self._use_frame_engine)
                 self.btn_stop.setEnabled(True)
-                self.btn_play.setIcon(self.style().standardIcon(QStyle.SP_MediaPause))
+                self.btn_play.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
                 self._update_video_display(path)
                 self._refresh_playlist()
                 self._sync_auto_advance()
@@ -513,12 +514,12 @@ class WallpaperGUI(QWidget):
         item = self.playlist_widget.itemAt(pos)
         if not item:
             return
-        idx = item.data(Qt.UserRole)
+        idx = item.data(Qt.ItemDataRole.UserRole)
         menu = QMenu(self)
         menu.addAction("Reproducir").triggered.connect(lambda: self._play_index(idx))
         menu.addAction("Eliminar").triggered.connect(lambda: self._remove_from_playlist(idx))
         menu.addAction("Limpiar playlist").triggered.connect(self._clear_playlist)
-        menu.exec_(self.playlist_widget.mapToGlobal(pos))
+        menu.exec(self.playlist_widget.mapToGlobal(pos))
 
     def _remove_from_playlist(self, idx):
         pl = self.config["playlist"]
@@ -601,7 +602,7 @@ class WallpaperGUI(QWidget):
             self._current_video = video
             self.btn_play.setEnabled(not self._use_frame_engine)
             self.btn_stop.setEnabled(True)
-            self.btn_play.setIcon(self.style().standardIcon(QStyle.SP_MediaPause))
+            self.btn_play.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
             self._update_video_display(video)
 
     def _select_video(self):
@@ -625,7 +626,7 @@ class WallpaperGUI(QWidget):
                 self._is_paused = False
                 self.btn_play.setEnabled(not self._use_frame_engine)
                 self.btn_stop.setEnabled(True)
-                self.btn_play.setIcon(self.style().standardIcon(QStyle.SP_MediaPause))
+                self.btn_play.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
                 self._update_video_display(file_path)
                 self._sync_auto_advance()
 
@@ -642,7 +643,7 @@ class WallpaperGUI(QWidget):
         if not samples:
             QMessageBox.information(self, "Sin ejemplos", "No hay videos .mp4 en la carpeta samples/")
             return
-        from PyQt5.QtWidgets import QInputDialog
+        from PyQt6.QtWidgets import QInputDialog
         names = [s.stem.replace("_", " ").title() for s in samples]
         name, ok = QInputDialog.getItem(self, "Video de ejemplo", "Selecciona un video:", names, 0, False)
         if ok and name:
@@ -660,7 +661,7 @@ class WallpaperGUI(QWidget):
                 self._is_paused = False
                 self.btn_play.setEnabled(not self._use_frame_engine)
                 self.btn_stop.setEnabled(True)
-                self.btn_play.setIcon(self.style().standardIcon(QStyle.SP_MediaPause))
+                self.btn_play.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
                 self._update_video_display(path)
                 self._sync_auto_advance()
 
@@ -692,7 +693,7 @@ class WallpaperGUI(QWidget):
             return
         self.engine.pause()
         self._is_paused = not self._is_paused
-        icon = QStyle.SP_MediaPlay if self._is_paused else QStyle.SP_MediaPause
+        icon = QStyle.StandardPixmap.SP_MediaPlay if self._is_paused else QStyle.StandardPixmap.SP_MediaPause
         self.btn_play.setIcon(self.style().standardIcon(icon))
 
     def _stop(self):
@@ -701,7 +702,7 @@ class WallpaperGUI(QWidget):
         self._is_paused = False
         self.btn_play.setEnabled(False)
         self.btn_stop.setEnabled(False)
-        self.btn_play.setIcon(self.style().standardIcon(QStyle.SP_MediaPlay))
+        self.btn_play.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
         self.video_label.setText("Arrastra un video o selecciona uno")
         self.video_info_label.setText("")
         self.thumbnail.clear()
@@ -856,4 +857,4 @@ def main():
     else:
         gui.show()
 
-    sys.exit(app.exec_())
+    sys.exit(app.exec())

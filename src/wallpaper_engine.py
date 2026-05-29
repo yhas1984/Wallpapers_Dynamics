@@ -472,7 +472,7 @@ class FrameWallpaperEngine:
 
         self._running = True
         try:
-            from PyQt5.QtCore import QTimer
+            from PyQt6.QtCore import QTimer
             self._timer = QTimer()
             self._timer.timeout.connect(self._update_frame)
             self._timer.start(int(1000 / self._fps))
