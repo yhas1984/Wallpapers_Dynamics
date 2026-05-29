@@ -410,6 +410,7 @@ class FrameWallpaperEngine:
         self._current_video = None
         self._fps = 5
         self._frame_counter = 1
+        self._busy = False
 
     def start(self, video_path, fps=60, on_complete=None):
         self.stop()
@@ -508,14 +509,16 @@ class FrameWallpaperEngine:
             self._on_complete()
 
     def _update_frame(self):
-        if not self._running or not self._frames:
+        if not self._running or not self._frames or self._busy:
             return
         try:
+            self._busy = True
             idx = self._frame_counter % len(self._frames)
             self._set_wallpaper(self._frames[idx])
             self._frame_counter += 1
         except Exception:
             pass
+        self._busy = False
 
     def _update_loop(self):
         import time as _time
@@ -562,6 +565,7 @@ class FrameWallpaperEngine:
 
     def stop(self, skip_restore=False):
         self._running = False
+        self._busy = False
         if self._timer:
             self._timer.stop()
             self._timer = None
