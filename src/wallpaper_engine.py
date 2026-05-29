@@ -32,11 +32,8 @@ GSETTINGS_KEY = "background-uris"
 
 
 class WallpaperEngine:
-    def __init__(self, desktop="unknown"):
+    def __init__(self, desktop="unknown", init_window=True):
         self._desktop = desktop
-        self._display = display.Display()
-        self._screen = self._display.screen()
-        self._root = self._screen.root
         self._window = None
         self._mpv_process = None
         self._current_video = None
@@ -46,7 +43,13 @@ class WallpaperEngine:
         self._is_muted = True
         self._ipc_ready = False
         self._original_wallpaper = None
-        self._setup_window()
+        if init_window:
+            self._display = display.Display()
+            self._screen = self._display.screen()
+            self._root = self._screen.root
+            self._setup_window()
+        else:
+            self._display = None
 
     def _get_screen_geometry(self):
         return self._screen.width_in_pixels, self._screen.height_in_pixels
@@ -226,6 +229,11 @@ class WallpaperEngine:
         self._stop_mpv()
 
         if not self._window:
+            if not self._display:
+                from Xlib import display as xdisplay
+                self._display = xdisplay.Display()
+                self._screen = self._display.screen()
+                self._root = self._screen.root
             self._setup_window()
         if not self._window:
             print("No se pudo crear la ventana")
@@ -503,7 +511,8 @@ class FrameWallpaperEngine:
             pass
 
     def _on_ffmpeg_check(self):
-        if self._ffmpeg_proc and self._ffmpeg_proc.poll() is not None:
+        done = self._ffmpeg_proc and self._ffmpeg_proc.poll() is not None
+        if done:
             try:
                 self._ffmpeg_proc.wait(timeout=5)
             except Exception:
@@ -513,10 +522,27 @@ class FrameWallpaperEngine:
             if self._ffmpeg_checker:
                 self._ffmpeg_checker.stop()
                 self._ffmpeg_checker = None
-            total = len(list(self._frame_dir.glob("frame_*.jpg")))
-            print(f"[WP] extraccion completa: {total} frames")
+            if not self._running:
+                current = sorted(
+                    self._frame_dir.glob("frame_*.jpg"),
+                    key=lambda p: int(p.stem.split("_")[1]),
+                )
+                if current:
+                    if len(current) > self.MAX_FRAMES:
+                        keep = current[::len(current) // self.MAX_FRAMES + 1]
+                        for old in current:
+                            if old not in keep:
+                                old.unlink(missing_ok=True)
+                        current = keep
+                    self._frames = current
+                    self._frame_counter = 0
+                    self._running = True
+                    self._set_wallpaper(current[0])
+                    self._tick()
+            print(f"[WP] extraccion completa: {len(self._frames)} frames")
             if self._on_complete:
                 self._on_complete()
+            return
 
         if not self._running:
             current = sorted(
@@ -538,71 +564,28 @@ class FrameWallpaperEngine:
             self._tick()
             return
 
-        if self._ffmpeg_proc:
-            available = sorted(
-                self._frame_dir.glob("frame_*.jpg"),
-                key=lambda p: int(p.stem.split("_")[1]),
-            )
-            existing = {f.name for f in self._frames}
-            added = 0
-            for f in available:
-                if f.name not in existing:
-                    self._frames.append(f)
-                    added += 1
-                self._ffmpeg_checker = None
-
-    def _update_loop(self):
-        import time as _time
-        while self._running and self._frames:
-            t0 = _time.time()
-            try:
-                idx = self._frame_counter % len(self._frames)
-                self._set_wallpaper(self._frames[idx])
-                self._frame_counter += 1
-            except Exception:
-                pass
-            elapsed = _time.time() - t0
-            desired = 1.0 / self._fps
-            _time.sleep(max(desired, elapsed * 1.1))
+        existing = {f.name for f in self._frames}
+        available = sorted(
+            self._frame_dir.glob("frame_*.jpg"),
+            key=lambda p: int(p.stem.split("_")[1]),
+        )
+        for f in available:
+            if f.name not in existing:
+                self._frames.append(f)
 
     def set_fps(self, fps):
         self._fps = max(1, min(fps, 180))
 
     def _set_wallpaper(self, path):
-        try:
-            shutil.copy2(path, self._current_path)
-        except Exception:
-            print(f"[WP] error copiando a current.jpg")
-            return
-
         uri = f"file://{path}"
         if uri == self._last_uri:
             return
         self._last_uri = uri
-        print(f"[WP] SET wallpaper {uri}")
+        print(f"[WP] set wallpaper {uri}")
         try:
             subprocess.run(
                 ["gsettings", "set", GSETTINGS_SCHEMA, GSETTINGS_KEY,
                  f"['{uri}']"],
-                capture_output=True, timeout=1,
-            )
-        except Exception:
-            pass
-        try:
-            subprocess.run(
-                ["gsettings", "set", GSETTINGS_SCHEMA, "wallpaper-uris",
-                 f"['{uri}']"],
-                capture_output=True, timeout=1,
-            )
-        except Exception:
-            pass
-        try:
-            subprocess.run(
-                ["dbus-send", "--session", "--dest=org.deepin.dde.Appearance1",
-                 "--type=method_call", "--print-reply",
-                 "/org/deepin/dde/Appearance1",
-                 "org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground",
-                 f"string:{uri}"],
                 capture_output=True, timeout=1,
             )
         except Exception:

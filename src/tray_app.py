@@ -144,11 +144,10 @@ class WallpaperGUI(QWidget):
         super().__init__()
         self.env = env
         self.config = load_config()
-        self._wp_engine = WallpaperEngine(desktop=env["desktop"])
+        self._wp_engine = WallpaperEngine(desktop=env["desktop"],
+                                          init_window=not self.config.get("show_icons", False) or env["desktop"] != "deepin")
         self._frame_engine = FrameWallpaperEngine()
         self._use_frame_engine = self.config.get("show_icons", False) if env["desktop"] == "deepin" else False
-        if self._use_frame_engine:
-            self._wp_engine.hide()
         self._is_paused = False
         self._current_video = None
         self._auto_advance_timer = QTimer()
