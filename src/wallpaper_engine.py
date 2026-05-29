@@ -32,8 +32,9 @@ GSETTINGS_KEY = "background-uris"
 
 
 class WallpaperEngine:
-    def __init__(self, desktop="unknown", init_window=True):
+    def __init__(self, desktop="unknown", init_window=True, icon_mode=False):
         self._desktop = desktop
+        self._icon_mode = icon_mode
         self._window = None
         self._mpv_process = None
         self._current_video = None
@@ -88,7 +89,28 @@ class WallpaperEngine:
     def _setup_window(self):
         w, h = self._get_screen_geometry()
 
-        win = self._root.create_window(
+        if self._icon_mode:
+            dw = self._find_desktop_window()
+            if dw:
+                win = dw.create_window(
+                    0, 0, w, h, 0,
+                    X.CopyFromParent,
+                    X.InputOutput,
+                    X.CopyFromParent,
+                    background_pixel=self._screen.black_pixel,
+                    event_mask=X.ExposureMask | X.StructureNotifyMask,
+                )
+            else:
+                win = self._root.create_window(
+                    0, 0, w, h, 0,
+                    X.CopyFromParent,
+                    X.InputOutput,
+                    X.CopyFromParent,
+                    background_pixel=self._screen.black_pixel,
+                    event_mask=X.ExposureMask | X.StructureNotifyMask,
+                )
+        else:
+            win = self._root.create_window(
             0, 0, w, h, 0,
             X.CopyFromParent,
             X.InputOutput,
@@ -109,12 +131,18 @@ class WallpaperEngine:
             "NAME": self._display.intern_atom("_NET_WM_NAME"),
         }
 
-        win.change_property(atoms["TYPE"], Xatom.ATOM, 32, [atoms["DESKTOP"]])
-        win.change_property(atoms["STATE"], Xatom.ATOM, 32, [
-            atoms["BELOW"], atoms["STICKY"], atoms["SKIP_P"], atoms["SKIP_T"],
-        ])
-        win.change_property(atoms["DESKTOP_ID"], Xatom.CARDINAL, 32, [0xFFFFFFFF])
-        win.change_property(atoms["NAME"], Xatom.STRING, 8, b"WallpaperDinamicos")
+        if self._icon_mode:
+            win.change_property(atoms["STATE"], Xatom.ATOM, 32, [
+                atoms["BELOW"], atoms["STICKY"], atoms["SKIP_P"], atoms["SKIP_T"],
+            ])
+            win.change_property(atoms["NAME"], Xatom.STRING, 8, b"WallpaperDinamicos")
+        else:
+            win.change_property(atoms["TYPE"], Xatom.ATOM, 32, [atoms["DESKTOP"]])
+            win.change_property(atoms["STATE"], Xatom.ATOM, 32, [
+                atoms["BELOW"], atoms["STICKY"], atoms["SKIP_P"], atoms["SKIP_T"],
+            ])
+            win.change_property(atoms["DESKTOP_ID"], Xatom.CARDINAL, 32, [0xFFFFFFFF])
+            win.change_property(atoms["NAME"], Xatom.STRING, 8, b"WallpaperDinamicos")
 
         win.map()
         self._display.sync()
@@ -577,6 +605,10 @@ class FrameWallpaperEngine:
         self._fps = max(1, min(fps, 180))
 
     def _set_wallpaper(self, path):
+        try:
+            shutil.copy2(path, self._current_path)
+        except Exception:
+            pass
         uri = f"file://{path}"
         if uri == self._last_uri:
             return
@@ -586,6 +618,17 @@ class FrameWallpaperEngine:
             subprocess.run(
                 ["gsettings", "set", GSETTINGS_SCHEMA, GSETTINGS_KEY,
                  f"['{uri}']"],
+                capture_output=True, timeout=1,
+            )
+        except Exception:
+            pass
+        try:
+            subprocess.run(
+                ["dbus-send", "--session", "--dest=org.deepin.dde.Appearance1",
+                 "--type=method_call", "--print-reply",
+                 "/org/deepin/dde/Appearance1",
+                 "org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground",
+                 f"string:{uri}"],
                 capture_output=True, timeout=1,
             )
         except Exception:
