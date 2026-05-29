@@ -628,10 +628,13 @@ class WallpaperGUI(QWidget):
         df = autostart_dir / "wallpaper-dinamicos.desktop"
         if checked:
             autostart_dir.mkdir(parents=True, exist_ok=True)
-            sp = Path(__file__).parent.parent / "run.py"
+            if getattr(sys, 'frozen', False):
+                exec_path = sys.executable
+            else:
+                exec_path = Path(__file__).parent.parent / "run.py"
             df.write_text(
                 "[Desktop Entry]\nType=Application\nName=Wallpaper Dinamicos\n"
-                f"Exec=python3 {sp}\nHidden=false\nNoDisplay=false\n"
+                f"Exec={exec_path}\nHidden=false\nNoDisplay=false\n"
                 "X-GNOME-Autostart-enabled=true\nStartupNotify=false\nTerminal=false\n"
             )
         elif df.exists():

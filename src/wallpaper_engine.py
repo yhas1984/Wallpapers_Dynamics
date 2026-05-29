@@ -7,6 +7,7 @@ import socket
 from pathlib import Path
 from Xlib import X, display
 from Xlib import Xatom
+from Xlib.protocol import event as xevent
 
 IPC_SOCKET = Path.home() / ".config" / "wallpaper-dinamicos" / "mpv-socket"
 
@@ -16,6 +17,9 @@ PLAYBACK_MODES = {
     "stretch": "--panscan=0.0 --keepaspect=no",
     "center": "--panscan=0.0 --keepaspect=yes --video-align-x=0 --video-align-y=0",
 }
+
+GSETTINGS_SCHEMA = "com.deepin.dde.appearance"
+GSETTINGS_KEY = "background-uris"
 
 
 class WallpaperEngine:
@@ -32,6 +36,7 @@ class WallpaperEngine:
         self._is_paused = False
         self._is_muted = True
         self._ipc_ready = False
+        self._original_wallpaper = None
         self._setup_window()
 
     def _get_screen_geometry(self):
@@ -70,64 +75,111 @@ class WallpaperEngine:
 
     def _setup_window(self):
         w, h = self._get_screen_geometry()
+
+        win = self._root.create_window(
+            0, 0, w, h, 0,
+            X.CopyFromParent,
+            X.InputOutput,
+            X.CopyFromParent,
+            background_pixel=self._screen.black_pixel,
+            event_mask=X.ExposureMask | X.StructureNotifyMask | X.SubstructureNotifyMask,
+        )
+
+        atoms = {
+            "TYPE": self._display.intern_atom("_NET_WM_WINDOW_TYPE"),
+            "DESKTOP": self._display.intern_atom("_NET_WM_WINDOW_TYPE_DESKTOP"),
+            "STATE": self._display.intern_atom("_NET_WM_STATE"),
+            "BELOW": self._display.intern_atom("_NET_WM_STATE_BELOW"),
+            "STICKY": self._display.intern_atom("_NET_WM_STATE_STICKY"),
+            "SKIP_P": self._display.intern_atom("_NET_WM_STATE_SKIP_PAGER"),
+            "SKIP_T": self._display.intern_atom("_NET_WM_STATE_SKIP_TASKBAR"),
+            "DESKTOP_ID": self._display.intern_atom("_NET_WM_DESKTOP"),
+            "NAME": self._display.intern_atom("_NET_WM_NAME"),
+        }
+
+        win.change_property(atoms["TYPE"], Xatom.ATOM, 32, [atoms["DESKTOP"]])
+        win.change_property(atoms["STATE"], Xatom.ATOM, 32, [
+            atoms["BELOW"], atoms["STICKY"], atoms["SKIP_P"], atoms["SKIP_T"],
+        ])
+        win.change_property(atoms["DESKTOP_ID"], Xatom.CARDINAL, 32, [0xFFFFFFFF])
+        win.change_property(atoms["NAME"], Xatom.STRING, 8, b"WallpaperDinamicos")
+
+        win.map()
+        self._display.sync()
+        time.sleep(0.3)
+
+        our_frame = win
+        try:
+            p = win.query_tree().parent
+            if p and p.id != self._root.id:
+                our_frame = p
+        except Exception:
+            pass
+
         desktop_win = self._find_desktop_window()
-
         if desktop_win:
-            win = desktop_win.create_window(
-                0, 0, w, h, 0,
-                X.CopyFromParent,
-                X.InputOutput,
-                X.CopyFromParent,
-                background_pixel=self._screen.black_pixel,
-                event_mask=X.ExposureMask | X.StructureNotifyMask,
-            )
-            win.map()
-            self._display.sync()
-            time.sleep(0.1)
             try:
-                win.configure(stack_mode=X.Below)
+                desk_frame = desktop_win
+                while True:
+                    p = desk_frame.query_tree().parent
+                    if not p or p.id == self._root.id:
+                        break
+                    desk_frame = p
             except Exception:
                 pass
-            self._display.sync()
-            self._window = win
-        else:
-            win = self._root.create_window(
-                0, 0, w, h, 0,
-                X.CopyFromParent,
-                X.InputOutput,
-                X.CopyFromParent,
-                background_pixel=self._screen.black_pixel,
-                event_mask=X.ExposureMask | X.StructureNotifyMask | X.SubstructureNotifyMask,
-            )
 
-            atoms = {
-                "TYPE": self._display.intern_atom("_NET_WM_WINDOW_TYPE"),
-                "DESKTOP": self._display.intern_atom("_NET_WM_WINDOW_TYPE_DESKTOP"),
-                "STATE": self._display.intern_atom("_NET_WM_STATE"),
-                "BELOW": self._display.intern_atom("_NET_WM_STATE_BELOW"),
-                "STICKY": self._display.intern_atom("_NET_WM_STATE_STICKY"),
-                "SKIP_P": self._display.intern_atom("_NET_WM_STATE_SKIP_PAGER"),
-                "SKIP_T": self._display.intern_atom("_NET_WM_STATE_SKIP_TASKBAR"),
-                "DESKTOP_ID": self._display.intern_atom("_NET_WM_DESKTOP"),
-                "NAME": self._display.intern_atom("_NET_WM_NAME"),
-            }
-
-            win.change_property(atoms["TYPE"], Xatom.ATOM, 32, [atoms["DESKTOP"]])
-            win.change_property(atoms["STATE"], Xatom.ATOM, 32, [
-                atoms["BELOW"], atoms["STICKY"], atoms["SKIP_P"], atoms["SKIP_T"],
-            ])
-            win.change_property(atoms["DESKTOP_ID"], Xatom.CARDINAL, 32, [0xFFFFFFFF])
-            win.change_property(atoms["NAME"], Xatom.STRING, 8, b"WallpaperDinamicos")
-
-            win.map()
-            self._display.sync()
-            time.sleep(0.2)
+        try:
+            if desktop_win and desk_frame and desk_frame.id != our_frame.id:
+                restack = self._display.intern_atom("_NET_RESTACK_WINDOW")
+                ev = xevent.ClientMessage(
+                    display=self._display,
+                    window=our_frame,
+                    client_type=restack,
+                    data=(32, [2, desk_frame.id, 0, 0, 0]),
+                )
+                mask = X.SubstructureRedirectMask | X.SubstructureNotifyMask
+                self._root.send_event(ev, event_mask=mask)
+                self._display.sync()
+            else:
+                our_frame.configure(stack_mode=X.Below)
+                self._display.sync()
+        except Exception:
             try:
-                win.configure(stack_mode=X.Below)
+                our_frame.configure(stack_mode=X.Below)
+                self._display.sync()
             except Exception:
                 pass
-            self._display.sync()
-            self._window = win
+
+        self._window = win
+        self._clear_wallpaper()
+
+    def _clear_wallpaper(self):
+        if self._desktop == "deepin":
+            try:
+                r = subprocess.run(
+                    ["gsettings", "get", GSETTINGS_SCHEMA, GSETTINGS_KEY],
+                    capture_output=True, text=True, timeout=2,
+                )
+                if r.returncode == 0:
+                    self._original_wallpaper = r.stdout.strip()
+                subprocess.run(
+                    ["gsettings", "set", GSETTINGS_SCHEMA, GSETTINGS_KEY, "@as []"],
+                    capture_output=True, timeout=2,
+                )
+            except Exception:
+                pass
+
+    def _restore_wallpaper(self):
+        if self._original_wallpaper:
+            try:
+                subprocess.run(
+                    ["gsettings", "set", GSETTINGS_SCHEMA, GSETTINGS_KEY,
+                     self._original_wallpaper],
+                    capture_output=True, timeout=2,
+                )
+            except Exception:
+                pass
+            self._original_wallpaper = None
 
     def _wait_ipc(self, timeout=3.0):
         start = time.time()
@@ -243,6 +295,7 @@ class WallpaperEngine:
 
     def cleanup(self):
         self.stop()
+        self._restore_wallpaper()
         if self._window:
             try:
                 self._window.destroy()
