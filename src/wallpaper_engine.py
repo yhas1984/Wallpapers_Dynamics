@@ -181,6 +181,7 @@ class WallpaperEngine:
     def _wait_ipc(self, timeout=3.0):
         start = time.time()
         while time.time() - start < timeout:
+            sock = None
             try:
                 sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
                 sock.settimeout(0.5)
@@ -189,6 +190,11 @@ class WallpaperEngine:
                 self._ipc_ready = True
                 return True
             except Exception:
+                if sock:
+                    try:
+                        sock.close()
+                    except Exception:
+                        pass
                 time.sleep(0.1)
         return False
 
