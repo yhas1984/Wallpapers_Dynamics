@@ -982,25 +982,22 @@ class WallpaperGUI(QWidget):
 
     def _apply_mode_debounce(self):
         if self._mode_debounce_val and self._current_video:
-            self._wp_engine.update_filters({"playback_mode": self._mode_debounce_val})
+            self.engine.update_filters({"playback_mode": self._mode_debounce_val})
 
     def _on_brightness(self, val):
         self.config["brightness"] = val
         self.brightness_slider._val_label.setText(str(val))
-        if not self._use_frame_engine:
-            self._wp_engine.set_brightness(val)
+        self.engine.set_brightness(val)
 
     def _on_contrast(self, val):
         self.config["contrast"] = val
         self.contrast_slider._val_label.setText(str(val))
-        if not self._use_frame_engine:
-            self._wp_engine.set_contrast(val)
+        self.engine.set_contrast(val)
 
     def _on_blur(self, val):
         self.config["blur"] = val
         self.blur_slider._val_label.setText(str(val))
-        if not self._use_frame_engine:
-            self._wp_engine.set_blur(val)
+        self.engine.set_blur(val)
 
     def _reset_filters(self):
         self.config.update({"brightness": 100, "contrast": 100, "blur": 0})
@@ -1008,10 +1005,9 @@ class WallpaperGUI(QWidget):
         self.brightness_slider.setValue(100)
         self.contrast_slider.setValue(100)
         self.blur_slider.setValue(0)
-        if not self._use_frame_engine:
-            self._wp_engine.set_brightness(100)
-            self._wp_engine.set_contrast(100)
-            self._wp_engine.set_blur(0)
+        self.engine.set_brightness(100)
+        self.engine.set_contrast(100)
+        self.engine.set_blur(0)
 
     def _toggle_autostart(self, checked):
         self.config["autostart"] = checked

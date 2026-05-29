@@ -632,5 +632,14 @@ class FrameWallpaperEngine:
     def set_volume(self, volume):
         pass
 
+    def set_brightness(self, val):
+        pass
+
+    def set_contrast(self, val):
+        pass
+
+    def set_blur(self, val):
+        pass
+
     def update_filters(self, filters):
         pass
