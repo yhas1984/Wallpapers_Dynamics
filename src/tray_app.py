@@ -843,6 +843,16 @@ def main():
 
     gui = WallpaperGUI(env)
     gui.app_ref = app
-    gui.show()
+
+    cfg = load_config()
+    if cfg.get("start_minimized", True):
+        gui.hide()
+        if gui.tray:
+            send_notification(
+                "Wallpaper Dinamicos",
+                "Iniciado minimizado. Doble clic en la bandeja para abrir.",
+            )
+    else:
+        gui.show()
 
     sys.exit(app.exec_())

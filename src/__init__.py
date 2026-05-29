@@ -22,6 +22,7 @@ DEFAULT_CONFIG = {
     "window_geometry": None,
     "frame_fps": 30,
     "show_icons": False,
+    "start_minimized": True,
 }
 
 
