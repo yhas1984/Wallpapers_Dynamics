@@ -344,6 +344,7 @@ class WallpaperEngine:
                 self._send_ipc_command(["set_property", "vf", f"boxblur={val}:{val}"])
             else:
                 self._send_ipc_command(["set_property", "vf", ""])
+                self._send_ipc_command(["vf", "clr"])
 
     def update_filters(self, filters):
         needs_restart = False
