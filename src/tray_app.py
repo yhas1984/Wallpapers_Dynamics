@@ -6,7 +6,7 @@ from PyQt5.QtWidgets import (
     QLabel, QPushButton, QFrame, QSlider, QCheckBox,
     QFileDialog, QSystemTrayIcon, QComboBox, QListWidget,
     QListWidgetItem, QAbstractItemView, QMenu, QShortcut,
-    QSpinBox, QStyle, QScrollArea,
+    QSpinBox, QStyle, QScrollArea, QMessageBox,
 )
 from PyQt5.QtGui import (
     QIcon, QPixmap, QPainter, QColor, QPalette,
@@ -250,6 +250,11 @@ class WallpaperGUI(QWidget):
         btn_select.setIcon(icons.icon_folder(16))
         btn_select.clicked.connect(self._select_video)
         btn_row1.addWidget(btn_select)
+
+        btn_sample = QPushButton("Ejemplo")
+        btn_sample.setIcon(icons.icon_play(16))
+        btn_sample.clicked.connect(self._load_sample)
+        btn_row1.addWidget(btn_sample)
 
         btn_add = QPushButton("+ Playlist")
         btn_add.setIcon(icons.icon_play(16))
@@ -621,6 +626,41 @@ class WallpaperGUI(QWidget):
                 self.btn_stop.setEnabled(True)
                 self.btn_play.setIcon(self.style().standardIcon(QStyle.SP_MediaPause))
                 self._update_video_display(file_path)
+                self._sync_auto_advance()
+
+    def _load_sample(self):
+        samples_dir = Path(__file__).parent.parent / "samples"
+        if not samples_dir.exists():
+            samples_dir = Path.home() / ".local" / "share" / "wallpaper-dinamicos" / "samples"
+        if not samples_dir.exists():
+            QMessageBox.information(self, "Sin ejemplos",
+                "No se encontraron videos de ejemplo.\n"
+                "Descarga desde: https://github.com/yhas1984/Wallpapers_Dynamics/tree/main/samples")
+            return
+        samples = list(samples_dir.glob("*.mp4"))
+        if not samples:
+            QMessageBox.information(self, "Sin ejemplos", "No hay videos .mp4 en la carpeta samples/")
+            return
+        from PyQt5.QtWidgets import QInputDialog
+        names = [s.stem.replace("_", " ").title() for s in samples]
+        name, ok = QInputDialog.getItem(self, "Video de ejemplo", "Selecciona un video:", names, 0, False)
+        if ok and name:
+            idx = names.index(name)
+            path = str(samples[idx])
+            self.config["last_video"] = path
+            if path not in self.config["playlist"]:
+                self.config["playlist"].append(path)
+                self.config["playlist_index"] = len(self.config["playlist"]) - 1
+            save_config(self.config)
+            self._refresh_playlist()
+            success = self.engine.start(path, fps=self.config.get("frame_fps", 30))
+            if success:
+                self._current_video = path
+                self._is_paused = False
+                self.btn_play.setEnabled(not self._use_frame_engine)
+                self.btn_stop.setEnabled(True)
+                self.btn_play.setIcon(self.style().standardIcon(QStyle.SP_MediaPause))
+                self._update_video_display(path)
                 self._sync_auto_advance()
 
     def _update_video_display(self, path):
