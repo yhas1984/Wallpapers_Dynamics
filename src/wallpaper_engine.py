@@ -465,10 +465,8 @@ class FrameWallpaperEngine:
     def start(self, video_path, fps=60, on_complete=None):
         self.stop()
         if not os.path.isfile(video_path):
-            print("[WP] start: video no encontrado")
             return False
 
-        print(f"[WP] start: fps={fps}, video={video_path}")
         self._fps = fps
         self._current_video = video_path
         self._frame_counter = 1
@@ -490,9 +488,7 @@ class FrameWallpaperEngine:
             self._ffmpeg_proc = subprocess.Popen(
                 cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             )
-            print(f"[WP] ffmpeg iniciado (PID {self._ffmpeg_proc.pid})")
         except Exception as e:
-            print(f"[WP] Error al iniciar ffmpeg: {e}")
             return False
 
         from PyQt6.QtCore import QTimer
@@ -545,7 +541,6 @@ class FrameWallpaperEngine:
                     self._running = True
                     self._set_wallpaper(current[0])
                     self._tick()
-            print(f"[WP] extraccion completa: {len(self._frames)} frames")
             if self._on_complete:
                 self._on_complete()
             return
@@ -591,7 +586,6 @@ class FrameWallpaperEngine:
         if uri == self._last_uri:
             return
         self._last_uri = uri
-        print(f"[WP] set wallpaper {uri}")
         try:
             subprocess.run(
                 ["gsettings", "set", GSETTINGS_SCHEMA, GSETTINGS_KEY,
@@ -613,7 +607,6 @@ class FrameWallpaperEngine:
             pass
 
     def stop(self, skip_restore=False):
-        print(f"[WP] stop(skip_restore={skip_restore})")
         self._running = False
         self._last_uri = None
         if self._ffmpeg_checker:
@@ -633,7 +626,6 @@ class FrameWallpaperEngine:
             self._restore_wallpaper()
 
     def cleanup(self, skip_restore=False):
-        print(f"[WP] cleanup(skip_restore={skip_restore})")
         self.stop(skip_restore=skip_restore)
         try:
             shutil.rmtree(self._frame_dir, ignore_errors=True)
@@ -641,7 +633,6 @@ class FrameWallpaperEngine:
             pass
 
     def _save_wallpaper(self):
-        print(f"[WP] _save_wallpaper")
         try:
             r = subprocess.run(
                 ["gsettings", "get", GSETTINGS_SCHEMA, GSETTINGS_KEY],
@@ -649,29 +640,21 @@ class FrameWallpaperEngine:
             )
             if r.returncode == 0:
                 val = r.stdout.strip()
-                print(f"[WP] wallpaper actual: {val}")
-                if val.startswith("@as"):
-                    self._original_wallpaper = None
-                else:
+                if not val.startswith("@as"):
                     self._original_wallpaper = val
-            else:
-                print(f"[WP] gsettings get fallo: {r.stderr.strip()}")
-        except Exception as e:
-            print(f"[WP] _save_wallpaper exception: {e}")
+        except Exception:
+            pass
 
     def _restore_wallpaper(self):
         if self._original_wallpaper:
             uri = self._original_wallpaper.strip("[]").strip("'\"")
-            print(f"[WP] restaurando wallpaper: {uri}")
             try:
                 subprocess.run(
                     ["gsettings", "set", GSETTINGS_SCHEMA, GSETTINGS_KEY,
                      f"['{uri}']"],
                     capture_output=True, timeout=1,
                 )
-                print(f"[WP] wallpaper restaurado OK")
             except Exception:
-                print(f"[WP] gsettings restore fallo, dbus-send...")
                 try:
                     subprocess.run(
                         ["dbus-send", "--session", "--dest=org.deepin.dde.Appearance1",
@@ -682,7 +665,7 @@ class FrameWallpaperEngine:
                         capture_output=True, timeout=1,
                     )
                 except Exception:
-                    print(f"[WP] dbus-send restore tambien fallo")
+                    pass
             self._original_wallpaper = None
 
     @property
