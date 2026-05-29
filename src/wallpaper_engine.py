@@ -573,17 +573,18 @@ class FrameWallpaperEngine:
         try:
             shutil.copy2(path, self._current_path)
         except Exception:
-            return
+            pass
 
         if self._skip > 0:
             self._skip -= 1
             return
-        self._skip = 60
+        self._skip = 5
 
+        uri = f"file://{path}"
         try:
             subprocess.run(
                 ["gsettings", "set", GSETTINGS_SCHEMA, GSETTINGS_KEY,
-                 f"['file://{self._current_path}']"],
+                 f"['{uri}']"],
                 capture_output=True, timeout=1,
             )
         except Exception:
@@ -593,7 +594,7 @@ class FrameWallpaperEngine:
                      "--type=method_call", "--print-reply",
                      "/org/deepin/dde/Appearance1",
                      "org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground",
-                     f"string:file://{self._current_path}"],
+                     f"string:{uri}"],
                     capture_output=True, timeout=1,
                 )
             except Exception:
