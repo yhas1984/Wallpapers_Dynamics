@@ -3,6 +3,7 @@
 Reproductor de video como fondo de pantalla animado para Linux. Compatible con X11 y Wayland.
 
 ![Wallpaper Dinamicos](screenshot.jpg)
+![Wallpaper Dinamicos - Panel](screenshot1.jpg)
 
 ## Características
 
