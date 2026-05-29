@@ -6,7 +6,7 @@ def _pixmap(size, draw_func):
     pixmap = QPixmap(size, size)
     pixmap.fill(Qt.GlobalColor.transparent)
     painter = QPainter(pixmap)
-    painter.setRenderHint(QPainter.Antialiasing)
+    painter.setRenderHint(QPainter.RenderHint.Antialiasing)
     draw_func(painter, size)
     painter.end()
     return QIcon(pixmap)
