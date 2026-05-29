@@ -188,19 +188,21 @@ class WallpaperGUI(QWidget):
 
     def _switch_engine_mode(self, use_frame):
         current_video = self._current_video
-        
+
         self._wp_engine.stop()
         self._wp_engine._destroy_window()
         self._frame_engine.cleanup()
-        
+
         self._use_frame_engine = use_frame
         self._update_controls_for_mode()
-        
+
+        if not use_frame:
+            self._wp_engine._setup_window()
+
         if current_video and os.path.isfile(current_video):
             if use_frame:
                 self.engine.start(current_video, fps=self.config.get("frame_fps", 30))
             else:
-                self._wp_engine._setup_window()
                 self.engine.start(current_video)
 
     def _update_controls_for_mode(self):

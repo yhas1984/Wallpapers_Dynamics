@@ -213,6 +213,12 @@ class WallpaperEngine:
             print(f"Video no encontrado: {video_path}")
             return False
 
+        if not self._window:
+            self._setup_window()
+        if not self._window:
+            print("No se pudo crear la ventana")
+            return False
+
         IPC_SOCKET.parent.mkdir(parents=True, exist_ok=True)
         if IPC_SOCKET.exists():
             IPC_SOCKET.unlink()
