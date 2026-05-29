@@ -11,6 +11,7 @@ from pathlib import Path
 from Xlib import X, display
 from Xlib import Xatom
 from Xlib.protocol import event as xevent
+from .engine_base import BaseWallpaperEngine
 
 IPC_SOCKET = Path.home() / ".config" / "wallpaper-dinamicos" / "mpv-socket"
 
@@ -25,7 +26,24 @@ GSETTINGS_SCHEMA = "com.deepin.dde.appearance"
 GSETTINGS_KEY = "background-uris"
 
 
-class WallpaperEngine:
+def auto_detect_engine(env: dict) -> BaseWallpaperEngine:
+    desktop = env.get("desktop", "unknown")
+    display_server = env.get("display_server", "x11")
+
+    if display_server == "wayland":
+        return FrameWallpaperEngine(desktop=desktop, display_server="wayland")
+
+    if display_server == "x11":
+        if desktop == "deepin":
+            icons_mode = env.get("show_icons", False)
+            if icons_mode:
+                return FrameWallpaperEngine(desktop=desktop, display_server="x11")
+        return WallpaperEngine(desktop=desktop)
+
+    return FrameWallpaperEngine(desktop=desktop, display_server=display_server)
+
+
+class WallpaperEngine(BaseWallpaperEngine):
     def __init__(self, desktop="unknown"):
         self._desktop = desktop
         self._display = display.Display()
@@ -41,6 +59,10 @@ class WallpaperEngine:
         self._ipc_ready = False
         self._original_wallpaper = None
         self._setup_window()
+
+    @property
+    def name(self) -> str:
+        return "x11-mpv"
 
     def _get_screen_geometry(self):
         return self._screen.width_in_pixels, self._screen.height_in_pixels
@@ -342,10 +364,6 @@ class WallpaperEngine:
     def current_video(self):
         return self._current_video
 
-    @property
-    def mode(self):
-        return "video"
-
     def hide(self):
         if self._window:
             try:
@@ -363,10 +381,12 @@ class WallpaperEngine:
                 pass
 
 
-class FrameWallpaperEngine:
+class FrameWallpaperEngine(BaseWallpaperEngine):
     MAX_FRAMES = 2000
 
-    def __init__(self):
+    def __init__(self, desktop="unknown", display_server="x11"):
+        self._desktop = desktop
+        self._display_server = display_server
         self._running = False
         self._thread = None
         self._ffmpeg_proc = None
@@ -374,15 +394,20 @@ class FrameWallpaperEngine:
         self._frames = []
         self._original_wallpaper = None
         self._current_video = None
-        self._fps = 5
+        self._fps = 60
         self._frame_counter = 0
 
-    def start(self, video_path, fps=60):
+    @property
+    def name(self) -> str:
+        return f"frame-{self._desktop}"
+
+    def start(self, video_path, fps=60, **kwargs):
         self.stop()
         if not os.path.isfile(video_path):
             return False
 
-        self._fps = fps
+        if fps:
+            self._fps = fps
         self._current_video = video_path
         self._frame_counter = 0
         self._save_wallpaper()
@@ -394,7 +419,7 @@ class FrameWallpaperEngine:
         cmd = [
             "ffmpeg",
             "-i", video_path,
-            "-vf", f"fps={fps}",
+            "-vf", f"fps={self._fps}",
             "-q:v", "5",
             "-y", output_pattern,
         ]
@@ -452,14 +477,34 @@ class FrameWallpaperEngine:
     def _set_wallpaper(self, path):
         uri = f"file://{path}"
         try:
-            subprocess.run(
-                ["dbus-send", "--session", "--dest=org.deepin.dde.Appearance1",
-                 "--type=method_call", "--print-reply",
-                 "/org/deepin/dde/Appearance1",
-                 "org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground",
-                 f"string:{uri}"],
-                capture_output=True, timeout=2,
-            )
+            if self._desktop == "deepin":
+                subprocess.run(
+                    ["dbus-send", "--session", "--dest=org.deepin.dde.Appearance1",
+                     "--type=method_call", "--print-reply",
+                     "/org/deepin/dde/Appearance1",
+                     "org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground",
+                     f"string:{uri}"],
+                    capture_output=True, timeout=2,
+                )
+            elif self._desktop in ("kde", "plasma"):
+                subprocess.run(
+                    ["dbus-send", "--session", "--dest=org.kde.plasmashell",
+                     "--type=method_call", "--print-reply",
+                     "/PlasmaShell",
+                     "org.kde.PlasmaShell.showWallpaper",
+                     f"string:{uri}"],
+                    capture_output=True, timeout=2,
+                )
+            elif self._desktop == "gnome":
+                cmd = ["gsettings", "set", "org.gnome.desktop.background",
+                       "picture-uri", f"file://{path}"]
+                subprocess.run(cmd, capture_output=True, timeout=2)
+            else:
+                subprocess.run(
+                    ["gsettings", "set", "org.gnome.desktop.background",
+                     "picture-uri", f"file://{path}"],
+                    capture_output=True, timeout=2,
+                )
         except Exception:
             pass
 
@@ -489,22 +534,37 @@ class FrameWallpaperEngine:
 
     def _save_wallpaper(self):
         try:
-            r = subprocess.run(
-                ["gsettings", "get", GSETTINGS_SCHEMA, GSETTINGS_KEY],
-                capture_output=True, text=True, timeout=2,
-            )
-            if r.returncode == 0:
-                val = r.stdout.strip()
-                if val.startswith("@as"):
-                    self._original_wallpaper = None
-                else:
-                    self._original_wallpaper = val
+            if self._desktop == "deepin":
+                r = subprocess.run(
+                    ["gsettings", "get", GSETTINGS_SCHEMA, GSETTINGS_KEY],
+                    capture_output=True, text=True, timeout=2,
+                )
+                if r.returncode == 0:
+                    val = r.stdout.strip()
+                    if not val.startswith("@as"):
+                        self._original_wallpaper = val
+            elif self._desktop == "gnome":
+                r = subprocess.run(
+                    ["gsettings", "get", "org.gnome.desktop.background", "picture-uri"],
+                    capture_output=True, text=True, timeout=2,
+                )
+                if r.returncode == 0:
+                    self._original_wallpaper = r.stdout.strip()
+            elif self._desktop in ("kde", "plasma"):
+                r = subprocess.run(
+                    ["gsettings", "get", "org.kde.plasma.core", "Wallpaper"],
+                    capture_output=True, text=True, timeout=2,
+                )
+                if r.returncode == 0:
+                    self._original_wallpaper = r.stdout.strip()
         except Exception:
             pass
 
     def _restore_wallpaper(self):
-        if self._original_wallpaper:
-            try:
+        if not self._original_wallpaper:
+            return
+        try:
+            if self._desktop == "deepin":
                 uri = self._original_wallpaper.strip("[]").strip("'\"")
                 subprocess.run(
                     ["dbus-send", "--session", "--dest=org.deepin.dde.Appearance1",
@@ -514,9 +574,9 @@ class FrameWallpaperEngine:
                      f"string:{uri}"],
                     capture_output=True, timeout=2,
                 )
-            except Exception:
-                pass
-            self._original_wallpaper = None
+        except Exception:
+            pass
+        self._original_wallpaper = None
 
     @property
     def is_running(self):
@@ -529,19 +589,3 @@ class FrameWallpaperEngine:
     @property
     def is_paused(self):
         return False
-
-    @property
-    def mode(self):
-        return "frame"
-
-    def pause(self):
-        pass
-
-    def set_mute(self, muted):
-        pass
-
-    def set_volume(self, volume):
-        pass
-
-    def update_filters(self, filters):
-        pass

@@ -16,7 +16,7 @@ def detect_environment():
         if "deepin" in cl:
             desktop = "deepin"
             break
-        if "kde" in cl or "plasma" in cl:
+        if "kde" in cl or "plasma" in cl or "kwin" in cl:
             desktop = "kde"
             break
         if "gnome" in cl or "pantheon" in cl:
@@ -28,22 +28,53 @@ def detect_environment():
         if "cinnamon" in cl:
             desktop = "cinnamon"
             break
+        if "sway" in cl:
+            desktop = "sway"
+            break
+        if "hyprland" in cl or "hypr" in cl:
+            desktop = "hyprland"
+            break
 
     if os.environ.get("WAYLAND_DISPLAY"):
         display_server = "wayland"
+        compositor = _detect_wayland_compositor()
     else:
         display_server = "x11"
+        compositor = desktop
 
     dark_mode, accent, bg, fg = _detect_theme(desktop)
 
     return {
         "desktop": desktop,
         "display_server": display_server,
+        "compositor": compositor,
         "dark_mode": dark_mode,
         "accent_color": accent,
         "bg_color": bg,
         "fg_color": fg,
     }
+
+
+def _detect_wayland_compositor():
+    wm = os.environ.get("XDG_SESSION_DESKTOP", "").lower()
+    if wm:
+        return wm
+    for var in ("SWAYSOCK", "HYPRLAND_INSTANCE_SIGNATURE", "MUTTER_DEBUG_CONFIG"):
+        if os.environ.get(var):
+            return var.split("_")[0].lower()
+    if os.environ.get("KDE_FULL_SESSION"):
+        return "kwin"
+    if os.environ.get("GNOME_DESKTOP_SESSION_ID"):
+        return "mutter"
+    try:
+        r = subprocess.run(["loginctl", "show-session", "$(loginctl | grep $(whoami) | awk '{print $1}')"],
+                           shell=True, capture_output=True, text=True, timeout=2)
+        for line in r.stdout.splitlines():
+            if "DesktopName" in line:
+                return line.split("=")[1].strip().lower()
+    except Exception:
+        pass
+    return "unknown"
 
 
 def _detect_theme(desktop):
@@ -55,12 +86,14 @@ def _detect_theme(desktop):
     try:
         if desktop == "deepin":
             dark_mode, accent, bg, fg = _deepin_theme()
-        elif desktop == "kde":
+        elif desktop in ("kde", "plasma"):
             dark_mode, accent, bg, fg = _kde_theme()
-        elif desktop == "gnome":
+        elif desktop in ("gnome", "pantheon"):
             dark_mode, accent, bg, fg = _gnome_theme()
-        elif desktop == "xfce":
+        elif desktop in ("xfce", "cinnamon"):
             dark_mode, accent, bg, fg = _xfce_theme()
+        elif desktop in ("sway", "hyprland"):
+            dark_mode, accent, bg, fg = _wlroots_theme()
     except Exception:
         pass
 
@@ -181,6 +214,30 @@ def _xfce_theme():
             if dark_mode:
                 bg = "#073642"
                 fg = "#fdf6e3"
+    except Exception:
+        pass
+    return dark_mode, accent, bg, fg
+
+
+def _wlroots_theme():
+    dark_mode = False
+    accent = "#7c3aed"
+    bg = "#1e1e2e"
+    fg = "#cdd6f4"
+    try:
+        gtk_theme = None
+        for ini in ("gtk-3.0/settings.ini", ".gtkrc-2.0"):
+            p = Path.home() / ".config" / ini
+            if p.exists():
+                content = p.read_text()
+                if "gtk-theme-name" in content:
+                    for line in content.splitlines():
+                        if "gtk-theme-name" in line:
+                            gtk_theme = line.split("=")[1].strip().lower()
+                            dark_mode = "dark" in gtk_theme
+        if dark_mode:
+            bg = "#1e1e2e"
+            fg = "#cdd6f4"
     except Exception:
         pass
     return dark_mode, accent, bg, fg

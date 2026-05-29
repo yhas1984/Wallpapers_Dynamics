@@ -13,7 +13,7 @@ from PyQt5.QtGui import (
     QKeySequence, QDragEnterEvent, QDropEvent, QFont,
 )
 from PyQt5.QtCore import Qt, QTimer, QSize, QUrl
-from .wallpaper_engine import WallpaperEngine, FrameWallpaperEngine, PLAYBACK_MODES
+from .wallpaper_engine import WallpaperEngine, auto_detect_engine, PLAYBACK_MODES
 from . import load_config, save_config
 from . import icons
 from .detector import detect_environment
@@ -117,11 +117,7 @@ class WallpaperGUI(QWidget):
         super().__init__()
         self.env = env
         self.config = load_config()
-        self._wp_engine = WallpaperEngine(desktop=env["desktop"])
-        self._frame_engine = FrameWallpaperEngine()
-        self._use_frame_engine = self.config.get("show_icons", False) if env["desktop"] == "deepin" else False
-        if self._use_frame_engine:
-            self._wp_engine.hide()
+        self._engine = auto_detect_engine(env)
         self._is_paused = False
         self._current_video = None
         self._auto_advance_timer = QTimer()
@@ -155,23 +151,22 @@ class WallpaperGUI(QWidget):
 
     @property
     def engine(self):
-        return self._frame_engine if self._use_frame_engine else self._wp_engine
+        return self._engine
+
+    @property
+    def _use_frame_engine(self):
+        return self._engine.name.startswith("frame")
 
     def _switch_engine_mode(self, use_frame):
         current_video = self._current_video
-        if self._wp_engine.is_running:
-            self._wp_engine.stop()
-        if self._frame_engine.is_running:
-            self._frame_engine.cleanup()
-        self._use_frame_engine = use_frame
+        self._engine.stop()
+        self._engine.cleanup()
+        env = dict(self.env)
+        env["show_icons"] = use_frame
+        self._engine = auto_detect_engine(env)
         self._update_controls_for_mode()
         if current_video and os.path.isfile(current_video):
-            if use_frame:
-                self._wp_engine.hide()
-                self.engine.start(current_video, fps=self.config.get("frame_fps", 30))
-            else:
-                self.engine.start(current_video)
-                self._wp_engine.show()
+            self.engine.start(current_video, fps=self.config.get("frame_fps", 30))
 
     def _update_controls_for_mode(self):
         is_frame = self._use_frame_engine
@@ -542,8 +537,8 @@ class WallpaperGUI(QWidget):
     def _on_fps_changed(self, val):
         self.config["frame_fps"] = val
         save_config(self.config)
-        if self._use_frame_engine and self._frame_engine.is_running:
-            self._frame_engine.set_fps(val)
+        if self._use_frame_engine and self._engine.is_running:
+            self._engine.set_fps(val)
 
     def _on_auto_advance_toggled(self, checked):
         self.config["auto_advance"] = checked
@@ -726,25 +721,25 @@ class WallpaperGUI(QWidget):
 
     def _apply_mode_debounce(self):
         if self._mode_debounce_val and self._current_video:
-            self._wp_engine.update_filters({"playback_mode": self._mode_debounce_val})
+            self._engine.update_filters({"playback_mode": self._mode_debounce_val})
 
     def _on_brightness(self, val):
         self.config["brightness"] = val
         self.brightness_slider._val_label.setText(str(val))
         if not self._use_frame_engine:
-            self._wp_engine.set_brightness(val)
+            self._engine.set_brightness(val)
 
     def _on_contrast(self, val):
         self.config["contrast"] = val
         self.contrast_slider._val_label.setText(str(val))
         if not self._use_frame_engine:
-            self._wp_engine.set_contrast(val)
+            self._engine.set_contrast(val)
 
     def _on_blur(self, val):
         self.config["blur"] = val
         self.blur_slider._val_label.setText(str(val))
         if not self._use_frame_engine:
-            self._wp_engine.set_blur(val)
+            self._engine.set_blur(val)
 
     def _reset_filters(self):
         self.config.update({"brightness": 100, "contrast": 100, "blur": 0})
@@ -753,9 +748,9 @@ class WallpaperGUI(QWidget):
         self.contrast_slider.setValue(100)
         self.blur_slider.setValue(0)
         if not self._use_frame_engine:
-            self._wp_engine.set_brightness(100)
-            self._wp_engine.set_contrast(100)
-            self._wp_engine.set_blur(0)
+            self._engine.set_brightness(100)
+            self._engine.set_contrast(100)
+            self._engine.set_blur(0)
 
     def _toggle_autostart(self, checked):
         self.config["autostart"] = checked
@@ -779,8 +774,7 @@ class WallpaperGUI(QWidget):
     def _quit(self):
         self._auto_advance_timer.stop()
         self._mode_debounce.stop()
-        self._wp_engine.cleanup()
-        self._frame_engine.cleanup()
+        self._engine.cleanup()
         self.app_ref.quit()
 
     def _restore_geometry(self):
