@@ -208,6 +208,7 @@ class WallpaperEngine:
             "--no-osd-bar",
             "--no-input-default-bindings",
             "--no-terminal",
+            "--stop-screensaver=no",
             f"--mute={'yes' if muted else 'no'}",
             f"--volume={volume}",
             f"--input-ipc-server={self._ipc_socket}",
