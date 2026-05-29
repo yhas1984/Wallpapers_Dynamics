@@ -433,6 +433,8 @@ class FrameWallpaperEngine:
         self._ffmpeg_checker = None
         self._on_complete = None
         self._frame_dir = Path(tempfile.gettempdir()) / "wp-dinamicos-frames"
+        self._current_path = Path(tempfile.gettempdir()) / "wp-dinamicos" / "current.jpg"
+        self._current_path.parent.mkdir(parents=True, exist_ok=True)
         self._frames = []
         self._original_wallpaper = None
         self._current_video = None
@@ -440,6 +442,7 @@ class FrameWallpaperEngine:
         self._frame_counter = 1
         self._busy = False
         self._dbus_iface = None
+        self._dbus_refresh_skip = 15
 
     def start(self, video_path, fps=60, on_complete=None):
         self.stop()
@@ -585,7 +588,18 @@ class FrameWallpaperEngine:
         return self._dbus_iface
 
     def _set_wallpaper(self, path):
-        uri = f"file://{path}"
+        try:
+            import shutil
+            shutil.copy2(path, self._current_path)
+        except Exception:
+            return
+
+        self._dbus_refresh_skip += 1
+        if self._dbus_refresh_skip < 15:
+            return
+        self._dbus_refresh_skip = 0
+
+        uri = f"file://{self._current_path}"
         iface = self._dbus_connect()
         if iface:
             try:
