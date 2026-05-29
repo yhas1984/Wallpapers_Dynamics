@@ -447,8 +447,8 @@ class WallpaperGUI(QWidget):
             pal.setColor(QPalette.ColorRole.WindowText, QColor(self.env["fg_color"]))
             pal.setColor(QPalette.ColorRole.Button, QColor(self.env["bg_color"]))
             pal.setColor(QPalette.ColorRole.ButtonText, QColor(self.env["fg_color"]))
-            pal.setColor(QPalette.Highlight, QColor(self.env["accent_color"]))
-            pal.setColor(QPalette.HighlightedText, QColor("white"))
+            pal.setColor(QPalette.ColorRole.Highlight, QColor(self.env["accent_color"]))
+            pal.setColor(QPalette.ColorRole.HighlightedText, QColor("white"))
         else:
             pal.setColor(QPalette.ColorRole.Window, QColor(self.env["bg_color"]))
             pal.setColor(QPalette.ColorRole.Base, QColor("#ffffff"))
@@ -456,8 +456,8 @@ class WallpaperGUI(QWidget):
             pal.setColor(QPalette.ColorRole.WindowText, QColor(self.env["fg_color"]))
             pal.setColor(QPalette.ColorRole.Button, QColor(self.env["bg_color"]))
             pal.setColor(QPalette.ColorRole.ButtonText, QColor(self.env["fg_color"]))
-            pal.setColor(QPalette.Highlight, QColor(self.env["accent_color"]))
-            pal.setColor(QPalette.HighlightedText, QColor("white"))
+            pal.setColor(QPalette.ColorRole.Highlight, QColor(self.env["accent_color"]))
+            pal.setColor(QPalette.ColorRole.HighlightedText, QColor("white"))
         QApplication.setPalette(pal)
         self.setPalette(pal)
 
