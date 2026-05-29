@@ -5,11 +5,12 @@ Reproductor de video como fondo de pantalla animado para Linux. Funciona en Deep
 ## Características
 
 - **Video como wallpaper** — reproduce videos MP4, WebM, MKV, AVI, MOV como fondo de escritorio real
-- **Integración nativa** — se incrusta dentro de la ventana del escritorio (`dde-shell/desktop`, `plasmashell`, etc.), los iconos y widgets quedan encima
-- **Bandeja del sistema** — control mínimo desde la bandeja, GUI completa al hacer doble clic
+- **Modo iconos (Deepin)** — extrae frames del video y los muestra vía D-Bus (`SetCurrentWorkspaceBackground`), permitiendo que los iconos del escritorio sean visibles encima
+- **Bandeja del sistema** — control mínimo desde la bandeja, GUI completa al hacer clic
 - **Playlist** — lista de reproducción con auto-avance configurable (5s–3600s)
 - **Modos de reproducción** — Fill, Fit, Stretch, Center
-- **Filtros en vivo** — brillo, contraste, blur (vía mpv IPC)
+- **Filtros en vivo** — brillo, contraste, blur (vía mpv IPC, sin reiniciar)
+- **FPS configurables** — 10–180 fps para el modo iconos
 - **Volumen** — control deslizante con mute automático
 - **Atajos de teclado** — Ctrl+O (abrir), Espacio (pausa), Ctrl+Q (salir), Ctrl+←/→ (anterior/siguiente), Ctrl+M (silencio)
 - **Drag & Drop** — arrastra videos directamente a la ventana
@@ -17,6 +18,14 @@ Reproductor de video como fondo de pantalla animado para Linux. Funciona en Deep
 - **Tema adaptable** — detecta modo oscuro/claro del sistema y ajusta colores
 - **Cross-desktop** — Deepin, KDE, GNOME, XFCE, Cinnamon y más
 - **Auto-inicio** — opción para iniciar con la sesión
+
+## Modos de funcionamiento
+
+### Modo normal (sin iconos)
+Usa mpv directamente incrustado en una ventana X11 del escritorio. Video fluido a fps nativos, con filtros, audio y controles completos. Los iconos del escritorio quedan debajo de la ventana de video.
+
+### Modo iconos (experimental, solo Deepin)
+Extrae frames del video con ffmpeg y los muestra como fondo de escritorio vía D-Bus de Deepin (`org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground`). Los iconos del escritorio quedan visibles encima. Sin audio, sin pausa, sin filtros — solo el video como fondo animado. FPS configurables (10–180).
 
 ## Requisitos
 
@@ -51,7 +60,16 @@ python3 run.py
 
 Arrastra un video a la ventana o haz clic en "Seleccionar" para elegir uno. El video se mostrará como fondo de escritorio al instante.
 
-Para cerrar al system tray, solo cierra la ventana (doble clic en el icono de la bandeja para reabrir).
+Para cerrar al system tray, solo cierra la ventana (clic en el icono de la bandeja para reabrir).
+
+### Ejecutable standalone
+
+También se puede generar un ejecutable independiente:
+
+```bash
+pyinstaller --onefile --name "wallpaper-dinamicos" --windowed run.py
+./dist/wallpaper-dinamicos
+```
 
 ## Estructura del proyecto
 
@@ -61,7 +79,7 @@ Para cerrar al system tray, solo cierra la ventana (doble clic en el icono de la
 ├── src/
 │   ├── __init__.py             # Configuración persistente (JSON)
 │   ├── detector.py             # Detección de escritorio/display/tema
-│   ├── wallpaper_engine.py     # Motor X11: ventana incrustada + mpv IPC
+│   ├── wallpaper_engine.py     # Motor X11 (mpv) + FrameWallpaperEngine (D-Bus)
 │   ├── tray_app.py             # GUI (PyQt5), bandeja, playlist
 │   ├── utils.py                # Metadatos de video, notificaciones
 │   └── icons.py                # Iconos generados programáticamente
@@ -85,6 +103,8 @@ El archivo de configuración se guarda en `~/.config/wallpaper-dinamicos/config.
 | `auto_advance` | bool | `false` | Avance automático |
 | `auto_advance_seconds` | int | `30` | Intervalo de avance (5–3600) |
 | `autostart` | bool | `false` | Iniciar con la sesión |
+| `show_icons` | bool | `false` | Modo iconos (Deepin) |
+| `frame_fps` | int | `30` | FPS del modo iconos (10–180) |
 
 ## Solución de problemas
 
@@ -93,8 +113,12 @@ El archivo de configuración se guarda en `~/.config/wallpaper-dinamicos/config.
 - Ejecuta desde terminal para ver errores: `python3 run.py`
 - Asegúrate de que mpv esté instalado: `mpv --version`
 
-**Los iconos del escritorio no se ven:**
-- Ocurre si el escritorio usa Qt/Wayland compositing. Reporta el caso en Issues.
+**Los iconos del escritorio no se ven (modo iconos):**
+- Verifica que estés en Deepin V23 con dde-shell
+- Prueba subir los FPS si el video se ve entrecortado
+
+**La app no se restaura desde la bandeja:**
+- En Deepin, haz clic simple en el icono de la bandeja (no doble clic)
 
 **Error "cannot connect to X server":**
 - Ejecuta la app desde una sesión gráfica, no desde SSH sin `-X`
