@@ -491,16 +491,33 @@ class FrameWallpaperEngine:
             self._set_wallpaper(first)
             self._frames = [first]
             self._running = True
-            try:
-                from PyQt6.QtCore import QTimer
-                self._timer = QTimer()
-                self._timer.timeout.connect(self._update_frame)
-                self._timer.start(int(1000 / self._fps))
-            except Exception:
-                self._timer = None
-                self._thread = threading.Thread(target=self._update_loop, daemon=True)
-                self._thread.start()
+            self._tick()
         return True
+
+    def _tick(self):
+        if not self._running or not self._frames:
+            return
+        self._busy = True
+        import time
+        t0 = time.time()
+        try:
+            idx = self._frame_counter % len(self._frames)
+            self._set_wallpaper(self._frames[idx])
+            self._frame_counter += 1
+        except Exception:
+            pass
+        elapsed = time.time() - t0
+        self._busy = False
+
+        desired = 1000.0 / self._fps
+        actual = max(elapsed * 1000, 5)
+        next_ms = max(desired, actual)
+        try:
+            from PyQt6.QtCore import QTimer
+            QTimer.singleShot(int(next_ms), self._tick)
+        except Exception:
+            self._thread = threading.Thread(target=self._update_loop, daemon=True)
+            self._thread.start()
 
     def _on_ffmpeg_check(self):
         if self._ffmpeg_proc and self._ffmpeg_proc.poll() is None:
@@ -537,36 +554,22 @@ class FrameWallpaperEngine:
         if self._on_complete:
             self._on_complete()
 
-    def _update_frame(self):
-        if not self._running or not self._frames or self._busy:
-            return
-        self._busy = True
-        try:
-            idx = self._frame_counter % len(self._frames)
-            self._set_wallpaper(self._frames[idx])
-            self._frame_counter += 1
-        except Exception:
-            pass
-        finally:
-            self._busy = False
-
     def _update_loop(self):
         import time as _time
-        interval = 1.0 / self._fps
-        total = len(self._frames)
-        while self._running and total > 0:
+        while self._running and self._frames:
+            t0 = _time.time()
             try:
-                idx = self._frame_counter % total
+                idx = self._frame_counter % len(self._frames)
                 self._set_wallpaper(self._frames[idx])
                 self._frame_counter += 1
             except Exception:
                 pass
-            _time.sleep(interval)
+            elapsed = _time.time() - t0
+            desired = 1.0 / self._fps
+            _time.sleep(max(desired, elapsed * 1.1))
 
     def set_fps(self, fps):
         self._fps = max(1, min(fps, 180))
-        if self._timer:
-            self._timer.setInterval(int(1000 / self._fps))
 
     def _dbus_connect(self):
         if self._dbus_iface is None and dbus:
@@ -616,9 +619,6 @@ class FrameWallpaperEngine:
     def stop(self, skip_restore=False):
         self._running = False
         self._busy = False
-        if self._timer:
-            self._timer.stop()
-            self._timer = None
         if self._ffmpeg_checker:
             self._ffmpeg_checker.stop()
             self._ffmpeg_checker = None
