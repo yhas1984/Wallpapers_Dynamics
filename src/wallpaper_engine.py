@@ -87,6 +87,11 @@ class WallpaperEngine:
         return _search(self._root)
 
     def _setup_window(self):
+        if not self._display:
+            from Xlib import display as xdisplay
+            self._display = xdisplay.Display()
+            self._screen = self._display.screen()
+            self._root = self._screen.root
         w, h = self._get_screen_geometry()
 
         if self._icon_mode:
@@ -380,6 +385,7 @@ class WallpaperEngine:
         self._destroy_window()
         if self._display:
             self._display.close()
+            self._display = None
 
     def pause(self):
         if self.is_running:
