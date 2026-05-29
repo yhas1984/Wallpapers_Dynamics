@@ -191,7 +191,7 @@ class WallpaperGUI(QWidget):
 
         self._wp_engine.stop()
         self._wp_engine._destroy_window()
-        self._frame_engine.cleanup()
+        self._frame_engine.cleanup(skip_restore=True)
 
         self._use_frame_engine = use_frame
         self._update_controls_for_mode()

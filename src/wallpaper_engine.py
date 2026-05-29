@@ -226,6 +226,7 @@ class WallpaperEngine:
         volume = self._filters.get("volume", 50)
         muted = self._filters.get("muted", True)
         mode = self._filters.get("playback_mode", "fill")
+        blur = self._filters.get("blur", 0)
 
         cmd = [
             "mpv",
@@ -245,20 +246,8 @@ class WallpaperEngine:
         mode_args = PLAYBACK_MODES.get(mode, PLAYBACK_MODES["fill"]).split()
         cmd.extend(mode_args)
 
-        brightness = self._filters.get("brightness", 100)
-        contrast = self._filters.get("contrast", 100)
-        blur = self._filters.get("blur", 0)
-
-        vf_parts = []
         if blur > 0:
-            vf_parts.append(f"boxblur={blur}:{blur}")
-        if brightness != 100:
-            vf_parts.append(f"eq=brightness={(brightness - 100) / 200:.2f}")
-        if contrast != 100:
-            vf_parts.append(f"eq=contrast={contrast / 100:.2f}")
-
-        if vf_parts:
-            cmd.append(f"--vf=lavfi={'|'.join(vf_parts)}")
+            cmd.append(f"--vf=lavfi=boxblur={blur}:{blur}")
 
         cmd.append(video_path)
 
@@ -270,6 +259,7 @@ class WallpaperEngine:
                 preexec_fn=os.setsid,
             )
             self._wait_ipc(timeout=3.0)
+            self._apply_initial_filters()
             self._current_video = video_path
             self._is_paused = False
             self._is_muted = muted
@@ -277,6 +267,14 @@ class WallpaperEngine:
         except Exception as e:
             print(f"Error al iniciar mpv: {e}")
             return False
+
+    def _apply_initial_filters(self):
+        brightness = self._filters.get("brightness", 100)
+        contrast = self._filters.get("contrast", 100)
+        if brightness != 100:
+            self._send_ipc_command(["set_property", "brightness", brightness - 100])
+        if contrast != 100:
+            self._send_ipc_command(["set_property", "contrast", contrast - 100])
 
     def _stop_mpv(self):
         if self._mpv_process:
@@ -330,36 +328,21 @@ class WallpaperEngine:
 
     def set_brightness(self, val):
         self._filters["brightness"] = val
-        self._apply_video_filters()
+        if self.is_running:
+            self._send_ipc_command(["set_property", "brightness", val - 100])
 
     def set_contrast(self, val):
         self._filters["contrast"] = val
-        self._apply_video_filters()
+        if self.is_running:
+            self._send_ipc_command(["set_property", "contrast", val - 100])
 
     def set_blur(self, val):
         self._filters["blur"] = val
-        self._apply_video_filters()
-
-    def _apply_video_filters(self):
-        if not self.is_running:
-            return
-        
-        brightness = self._filters.get("brightness", 100)
-        contrast = self._filters.get("contrast", 100)
-        blur = self._filters.get("blur", 0)
-
-        vf_parts = []
-        if blur > 0:
-            vf_parts.append(f"boxblur={blur}:{blur}")
-        if brightness != 100:
-            vf_parts.append(f"eq=brightness={(brightness - 100) / 200:.2f}")
-        if contrast != 100:
-            vf_parts.append(f"eq=contrast={contrast / 100:.2f}")
-
-        if vf_parts:
-            self._send_ipc_command(["vf", "set", f"lavfi={'|'.join(vf_parts)}"])
-        else:
-            self._send_ipc_command(["vf", "clr"])
+        if self.is_running:
+            if val > 0:
+                self._send_ipc_command(["vf", "set", f"lavfi=boxblur={val}:{val}"])
+            else:
+                self._send_ipc_command(["vf", "clr"])
 
     def update_filters(self, filters):
         needs_restart = False
@@ -424,7 +407,7 @@ class FrameWallpaperEngine:
         self._original_wallpaper = None
         self._current_video = None
         self._fps = 5
-        self._frame_counter = 0
+        self._frame_counter = 1
 
     def start(self, video_path, fps=60, on_complete=None):
         self.stop()
@@ -433,12 +416,22 @@ class FrameWallpaperEngine:
 
         self._fps = fps
         self._current_video = video_path
-        self._frame_counter = 0
+        self._frame_counter = 1
         self._on_complete = on_complete
         self._save_wallpaper()
         self._frame_dir.mkdir(parents=True, exist_ok=True)
         for f in self._frame_dir.iterdir():
             f.unlink(missing_ok=True)
+
+        first_frame = str(self._frame_dir / "frame_1.jpg")
+        try:
+            subprocess.run(
+                ["ffmpeg", "-y", "-i", video_path, "-vf", f"fps={fps}",
+                 "-vframes", "1", "-q:v", "5", first_frame],
+                capture_output=True, timeout=10,
+            )
+        except Exception:
+            pass
 
         output_pattern = str(self._frame_dir / "frame_%d.jpg")
         cmd = [
@@ -460,6 +453,21 @@ class FrameWallpaperEngine:
         self._ffmpeg_checker = QTimer()
         self._ffmpeg_checker.timeout.connect(self._on_ffmpeg_check)
         self._ffmpeg_checker.start(100)
+
+        first = Path(first_frame)
+        if first.exists() and first.stat().st_size > 0:
+            self._set_wallpaper(first)
+            self._frames = [first]
+            self._running = True
+            try:
+                from PyQt6.QtCore import QTimer
+                self._timer = QTimer()
+                self._timer.timeout.connect(self._update_frame)
+                self._timer.start(int(1000 / self._fps))
+            except Exception:
+                self._timer = None
+                self._thread = threading.Thread(target=self._update_loop, daemon=True)
+                self._thread.start()
         return True
 
     def _on_ffmpeg_check(self):
@@ -477,31 +485,22 @@ class FrameWallpaperEngine:
                 self._ffmpeg_proc.wait()
             self._ffmpeg_proc = None
 
-        self._frames = sorted(
+        all_frames = sorted(
             self._frame_dir.glob("frame_*.jpg"),
             key=lambda p: int(p.stem.split("_")[1]),
         )
-        if not self._frames:
-            print("No se generaron frames")
-            return
-
-        if len(self._frames) > self.MAX_FRAMES:
-            keep = self._frames[::len(self._frames) // self.MAX_FRAMES + 1]
-            for old in self._frames:
+        if len(all_frames) > self.MAX_FRAMES:
+            keep = all_frames[::len(all_frames) // self.MAX_FRAMES + 1]
+            for old in all_frames:
                 if old not in keep:
                     old.unlink(missing_ok=True)
-            self._frames = keep
+            all_frames = keep
 
-        self._running = True
-        try:
-            from PyQt6.QtCore import QTimer
-            self._timer = QTimer()
-            self._timer.timeout.connect(self._update_frame)
-            self._timer.start(int(1000 / self._fps))
-        except Exception:
-            self._timer = None
-            self._thread = threading.Thread(target=self._update_loop, daemon=True)
-            self._thread.start()
+        if all_frames:
+            self._frames = all_frames
+        else:
+            print("No se generaron frames")
+            return
 
         if self._on_complete:
             self._on_complete()
@@ -559,7 +558,7 @@ class FrameWallpaperEngine:
             except Exception:
                 pass
 
-    def stop(self):
+    def stop(self, skip_restore=False):
         self._running = False
         if self._timer:
             self._timer.stop()
@@ -577,10 +576,11 @@ class FrameWallpaperEngine:
                 except Exception:
                     pass
             self._ffmpeg_proc = None
-        self._restore_wallpaper()
+        if not skip_restore:
+            self._restore_wallpaper()
 
-    def cleanup(self):
-        self.stop()
+    def cleanup(self, skip_restore=False):
+        self.stop(skip_restore=skip_restore)
         try:
             shutil.rmtree(self._frame_dir, ignore_errors=True)
         except Exception:
