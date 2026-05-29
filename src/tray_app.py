@@ -24,8 +24,9 @@ from .utils import get_video_info, format_duration, format_resolution, send_noti
 class TitleBar(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setFixedHeight(32)
+        self.setFixedHeight(36)
         self._drag_pos = None
+        self.setObjectName("TitleBar")
 
         layout = QHBoxLayout()
         layout.setContentsMargins(8, 0, 4, 0)
@@ -44,6 +45,7 @@ class TitleBar(QWidget):
         layout.addStretch()
 
         self.info_label = QLabel("")
+        self.info_label.setObjectName("infoLabel")
         self.info_label.setStyleSheet("color: gray; font-size: 10px;")
         layout.addWidget(self.info_label)
 
@@ -88,19 +90,43 @@ class ThumbnailWidget(QLabel):
     def __init__(self, parent=None):
         super().__init__(parent)
         self.setFixedSize(260, 145)
-        self.setFrameShape(QFrame.Shape.Box)
         self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setStyleSheet("""
+            ThumbnailWidget {
+                background: transparent;
+                border: 1px dashed #888;
+                border-radius: 8px;
+                font-size: 12px;
+                color: #888;
+            }
+        """)
         self.setText("Sin preview")
 
     def set_video(self, path):
         if not path or not os.path.isfile(path):
             self.setText("Sin preview")
+            self.setStyleSheet("""
+                ThumbnailWidget {
+                    background: transparent;
+                    border: 1px dashed #888;
+                    border-radius: 8px;
+                    font-size: 12px;
+                    color: #888;
+                }
+            """)
             return
         thumb_path = generate_thumbnail(path)
         if thumb_path:
             pixmap = QPixmap(thumb_path)
             if not pixmap.isNull():
                 self.setPixmap(pixmap)
+                self.setStyleSheet("""
+                    ThumbnailWidget {
+                        background: transparent;
+                        border: 1px solid #555;
+                        border-radius: 8px;
+                    }
+                """)
                 try:
                     Path(thumb_path).unlink(missing_ok=True)
                 except Exception:
@@ -136,6 +162,7 @@ class WallpaperGUI(QWidget):
 
         self.setWindowTitle("Wallpaper Dinamicos")
         self.setWindowIcon(icons.icon_app(48))
+        self.setObjectName("MainWindow")
         self.setMinimumSize(300, 520)
         self.setMaximumSize(400, 720)
         self.resize(320, 580)
@@ -143,6 +170,7 @@ class WallpaperGUI(QWidget):
         self.setAutoFillBackground(True)
 
         self._fix_palette()
+        self._apply_stylesheet()
         self._restore_geometry()
         self._build_ui()
         self._setup_shortcuts()
@@ -186,6 +214,229 @@ class WallpaperGUI(QWidget):
         self.blur_slider.setEnabled(not is_frame)
         if hasattr(self, "fps_spin"):
             self.fps_spin.setEnabled(is_frame)
+
+    def _apply_stylesheet(self):
+        dark = self.env["dark_mode"]
+        bg = self.env["bg_color"]
+        fg = self.env["fg_color"]
+        accent = self.env["accent_color"]
+        alt = "#1f2326" if dark else "#f5f5f5"
+        surface = "#2a2e35" if dark else "#ffffff"
+        border = "#3d424a" if dark else "#d0d0d0"
+        muted = "#8a8f96" if dark else "#999999"
+        hover_bg = "#3d424a" if dark else "#e8e8e8"
+        pressed_bg = "#4a5060" if dark else "#d0d0d0"
+
+        qss = f"""
+        QWidget {{
+            background-color: {bg};
+            color: {fg};
+        }}
+        QWidget#MainWindow {{
+            border-radius: 10px;
+        }}
+        QScrollArea {{
+            border: none;
+            background: transparent;
+        }}
+        QScrollArea > QWidget > QWidget {{
+            background: transparent;
+        }}
+        QPushButton {{
+            background-color: {surface};
+            color: {fg};
+            border: 1px solid {border};
+            border-radius: 6px;
+            padding: 5px 12px;
+            min-height: 24px;
+            font-size: 12px;
+        }}
+        QPushButton:hover {{
+            background-color: {hover_bg};
+            border-color: {accent};
+        }}
+        QPushButton:pressed {{
+            background-color: {pressed_bg};
+        }}
+        QPushButton:disabled {{
+            background-color: {bg};
+            color: {muted};
+            border-color: {border};
+        }}
+        QPushButton:flat {{
+            border: none;
+            background: transparent;
+        }}
+        QPushButton:flat:hover {{
+            background-color: {hover_bg};
+        }}
+        QLabel {{
+            background: transparent;
+            color: {fg};
+        }}
+        QLabel#infoLabel {{
+            color: {muted};
+            font-size: 10px;
+        }}
+        #TitleBar {{
+            background-color: {surface};
+            border-bottom: 1px solid {border};
+            border-top-left-radius: 8px;
+            border-top-right-radius: 8px;
+        }}
+        #TitleBar QPushButton {{
+            background: transparent;
+            border: none;
+            border-radius: 4px;
+            min-height: 20px;
+            min-width: 20px;
+            padding: 2px;
+        }}
+        #TitleBar QPushButton:hover {{
+            background-color: {hover_bg};
+        }}
+        QComboBox {{
+            background-color: {surface};
+            color: {fg};
+            border: 1px solid {border};
+            border-radius: 6px;
+            padding: 4px 8px;
+            min-height: 22px;
+            font-size: 12px;
+        }}
+        QComboBox:hover {{
+            border-color: {accent};
+        }}
+        QComboBox::drop-down {{
+            border: none;
+            width: 20px;
+        }}
+        QComboBox::down-arrow {{
+            width: 8px;
+            height: 8px;
+        }}
+        QComboBox QAbstractItemView {{
+            background-color: {surface};
+            color: {fg};
+            border: 1px solid {border};
+            border-radius: 4px;
+            selection-background-color: {accent};
+        }}
+        QCheckBox {{
+            spacing: 6px;
+            font-size: 12px;
+            background: transparent;
+        }}
+        QCheckBox::indicator {{
+            width: 16px;
+            height: 16px;
+            border: 1px solid {border};
+            border-radius: 3px;
+            background: {surface};
+        }}
+        QCheckBox::indicator:hover {{
+            border-color: {accent};
+        }}
+        QCheckBox::indicator:checked {{
+            background-color: {accent};
+            border-color: {accent};
+        }}
+        QSpinBox {{
+            background-color: {surface};
+            color: {fg};
+            border: 1px solid {border};
+            border-radius: 6px;
+            padding: 3px 6px;
+            min-height: 22px;
+            font-size: 12px;
+        }}
+        QSpinBox:hover {{
+            border-color: {accent};
+        }}
+        QSpinBox::up-button, QSpinBox::down-button {{
+            border: none;
+            background: transparent;
+            width: 16px;
+        }}
+        QListWidget {{
+            background-color: {surface};
+            color: {fg};
+            border: 1px solid {border};
+            border-radius: 6px;
+            padding: 2px;
+            font-size: 11px;
+            outline: none;
+        }}
+        QListWidget::item {{
+            padding: 4px 6px;
+            border-radius: 4px;
+        }}
+        QListWidget::item:hover {{
+            background-color: {hover_bg};
+        }}
+        QListWidget::item:selected {{
+            background-color: {accent};
+            color: white;
+        }}
+        QSlider::groove:horizontal {{
+            background: {border};
+            height: 4px;
+            border-radius: 2px;
+        }}
+        QSlider::handle:horizontal {{
+            background: {accent};
+            width: 14px;
+            height: 14px;
+            margin: -5px 0;
+            border-radius: 7px;
+        }}
+        QSlider::handle:horizontal:hover {{
+            background: {accent};
+            width: 16px;
+            height: 16px;
+            margin: -6px 0;
+            border-radius: 8px;
+        }}
+        QSlider::sub-page:horizontal {{
+            background: {accent};
+            border-radius: 2px;
+        }}
+        QScrollBar:vertical {{
+            background: transparent;
+            width: 6px;
+            margin: 0;
+        }}
+        QScrollBar::handle:vertical {{
+            background: {border};
+            border-radius: 3px;
+            min-height: 20px;
+        }}
+        QScrollBar::handle:vertical:hover {{
+            background: {muted};
+        }}
+        QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
+            height: 0;
+        }}
+        QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {{
+            background: none;
+        }}
+        QMenu {{
+            background-color: {surface};
+            color: {fg};
+            border: 1px solid {border};
+            border-radius: 6px;
+            padding: 4px;
+        }}
+        QMenu::item {{
+            padding: 6px 24px;
+            border-radius: 4px;
+        }}
+        QMenu::item:selected {{
+            background-color: {accent};
+            color: white;
+        }}
+        """
+        self.setStyleSheet(qss)
 
     def _fix_palette(self):
         pal = QApplication.palette()
@@ -237,8 +488,8 @@ class WallpaperGUI(QWidget):
         cl.addWidget(self.video_label)
 
         self.video_info_label = QLabel("")
+        self.video_info_label.setObjectName("infoLabel")
         self.video_info_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self.video_info_label.setStyleSheet("color: gray; font-size: 10px;")
         cl.addWidget(self.video_info_label)
 
         self.playlist_label = QLabel("")
@@ -400,7 +651,8 @@ class WallpaperGUI(QWidget):
     def _sep(self):
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setFrameShadow(QFrame.Shadow.Sunken)
+        sep.setFixedHeight(1)
+        sep.setStyleSheet("QFrame { background: palette(mid); border: none; max-height: 1px; }")
         return sep
 
     def _make_slider(self, label_text, parent_layout, min_val, max_val, default, callback):
