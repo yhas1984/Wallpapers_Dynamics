@@ -122,14 +122,22 @@ class WallpaperEngine:
         desktop_win = self._find_desktop_window()
         if desktop_win:
             try:
-                desk_frame = desktop_win
-                while True:
-                    p = desk_frame.query_tree().parent
-                    if not p or p.id == self._root.id:
-                        break
-                    desk_frame = p
+                win.reparent(desktop_win, 0, 0)
+                self._display.sync()
+                self._window = win
+                return
             except Exception:
                 pass
+
+        try:
+            desk_frame = desktop_win
+            while True:
+                p = desk_frame.query_tree().parent
+                if not p or p.id == self._root.id:
+                    break
+                desk_frame = p
+        except Exception:
+            pass
 
         try:
             if desktop_win and desk_frame and desk_frame.id != our_frame.id:
@@ -268,8 +276,7 @@ class WallpaperEngine:
         self._current_video = None
         self._is_paused = False
 
-    def cleanup(self):
-        self.stop()
+    def _destroy_window(self):
         if self._window:
             try:
                 self._window.destroy()
@@ -277,6 +284,10 @@ class WallpaperEngine:
             except Exception:
                 pass
             self._window = None
+
+    def cleanup(self):
+        self.stop()
+        self._destroy_window()
         if self._display:
             self._display.close()
 
