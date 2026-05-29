@@ -2,7 +2,7 @@
 
 Reproductor de video como fondo de pantalla animado para Linux. Funciona en Deepin, KDE Plasma, GNOME, XFCE y otros entornos de escritorio X11.
 
-![Wallpaper Dinamicos](screenshot.png)
+![Wallpaper Dinamicos](screenshot.jpg)
 
 ## Características
 
