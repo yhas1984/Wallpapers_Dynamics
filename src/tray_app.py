@@ -517,7 +517,7 @@ class WallpaperGUI(QWidget):
 
         self.playlist_widget = QListWidget()
         self.playlist_widget.setMaximumHeight(90)
-        self.playlist_widget.setSelectionMode(QAbstractItemView.SingleSelection)
+        self.playlist_widget.setSelectionMode(QAbstractItemView.SelectionMode.SingleSelection)
         self.playlist_widget.itemDoubleClicked.connect(self._play_from_playlist)
         self.playlist_widget.setContextMenuPolicy(Qt.ContextMenuPolicy.CustomContextMenu)
         self.playlist_widget.customContextMenuRequested.connect(self._playlist_context_menu)
