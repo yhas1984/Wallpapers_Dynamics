@@ -839,7 +839,7 @@ class WallpaperGUI(QWidget):
             self.tray = None
 
     def _on_tray_activated(self, reason):
-        if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
+        if reason in (QSystemTrayIcon.ActivationReason.Trigger, QSystemTrayIcon.ActivationReason.DoubleClick):
             if self.isVisible() and not self.isMinimized():
                 self.hide()
             else:
