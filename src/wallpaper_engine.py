@@ -410,7 +410,7 @@ class FrameWallpaperEngine:
         self._fps = 5
         self._frame_counter = 1
         self._busy = False
-        self._dbus = None
+        self._dbus_iface = None
 
     def start(self, video_path, fps=60, on_complete=None):
         self.stop()
@@ -511,14 +511,15 @@ class FrameWallpaperEngine:
     def _update_frame(self):
         if not self._running or not self._frames or self._busy:
             return
+        self._busy = True
         try:
-            self._busy = True
             idx = self._frame_counter % len(self._frames)
             self._set_wallpaper(self._frames[idx])
             self._frame_counter += 1
         except Exception:
             pass
-        self._busy = False
+        finally:
+            self._busy = False
 
     def _update_loop(self):
         import time as _time
@@ -539,26 +540,26 @@ class FrameWallpaperEngine:
             self._timer.setInterval(int(1000 / self._fps))
 
     def _dbus_connect(self):
-        if self._dbus is None and dbus:
+        if self._dbus_iface is None and dbus:
             try:
-                self._dbus = dbus.SessionBus()
-            except Exception:
-                self._dbus = False
-        return self._dbus
-
-    def _set_wallpaper(self, path):
-        uri = f"file://{path}"
-        d = self._dbus_connect()
-        if d:
-            try:
-                proxy = d.get_object(
+                s = dbus.SessionBus()
+                proxy = s.get_object(
                     "org.deepin.dde.Appearance1",
                     "/org/deepin/dde/Appearance1"
                 )
-                iface = dbus.Interface(proxy, "org.deepin.dde.Appearance1")
-                iface.SetCurrentWorkspaceBackground(uri, timeout=5)
+                self._dbus_iface = dbus.Interface(proxy, "org.deepin.dde.Appearance1")
             except Exception:
-                self._dbus = None
+                self._dbus_iface = False
+        return self._dbus_iface
+
+    def _set_wallpaper(self, path):
+        uri = f"file://{path}"
+        iface = self._dbus_connect()
+        if iface:
+            try:
+                iface.SetCurrentWorkspaceBackground(uri, timeout=0.5)
+            except Exception:
+                self._dbus_iface = None
                 try:
                     subprocess.run(
                         ["dbus-send", "--session", "--dest=org.deepin.dde.Appearance1",
@@ -566,7 +567,7 @@ class FrameWallpaperEngine:
                          "/org/deepin/dde/Appearance1",
                          "org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground",
                          f"string:{uri}"],
-                        capture_output=True, timeout=2,
+                        capture_output=True, timeout=1,
                     )
                 except Exception:
                     pass
@@ -578,7 +579,7 @@ class FrameWallpaperEngine:
                      "/org/deepin/dde/Appearance1",
                      "org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground",
                      f"string:{uri}"],
-                    capture_output=True, timeout=2,
+                    capture_output=True, timeout=1,
                 )
             except Exception:
                 pass
@@ -630,17 +631,12 @@ class FrameWallpaperEngine:
     def _restore_wallpaper(self):
         if self._original_wallpaper:
             uri = self._original_wallpaper.strip("[]").strip("'\"")
-            d = self._dbus_connect()
-            if d:
+            iface = self._dbus_connect()
+            if iface:
                 try:
-                    proxy = d.get_object(
-                        "org.deepin.dde.Appearance1",
-                        "/org/deepin/dde/Appearance1"
-                    )
-                    iface = dbus.Interface(proxy, "org.deepin.dde.Appearance1")
-                    iface.SetCurrentWorkspaceBackground(uri, timeout=5)
+                    iface.SetCurrentWorkspaceBackground(uri, timeout=0.5)
                 except Exception:
-                    self._dbus = None
+                    self._dbus_iface = None
                     try:
                         subprocess.run(
                             ["dbus-send", "--session", "--dest=org.deepin.dde.Appearance1",
@@ -648,7 +644,7 @@ class FrameWallpaperEngine:
                              "/org/deepin/dde/Appearance1",
                              "org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground",
                              f"string:{uri}"],
-                            capture_output=True, timeout=2,
+                            capture_output=True, timeout=1,
                         )
                     except Exception:
                         pass
@@ -660,7 +656,7 @@ class FrameWallpaperEngine:
                          "/org/deepin/dde/Appearance1",
                          "org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground",
                          f"string:{uri}"],
-                        capture_output=True, timeout=2,
+                        capture_output=True, timeout=1,
                     )
                 except Exception:
                     pass
