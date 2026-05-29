@@ -6,14 +6,14 @@ from PyQt5.QtWidgets import (
     QLabel, QPushButton, QFrame, QSlider, QCheckBox,
     QFileDialog, QSystemTrayIcon, QComboBox, QListWidget,
     QListWidgetItem, QAbstractItemView, QMenu, QShortcut,
-    QSpinBox, QStyle,
+    QSpinBox, QStyle, QScrollArea,
 )
 from PyQt5.QtGui import (
     QIcon, QPixmap, QPainter, QColor, QPalette,
     QKeySequence, QDragEnterEvent, QDropEvent, QFont,
 )
 from PyQt5.QtCore import Qt, QTimer, QSize, QUrl
-from .wallpaper_engine import WallpaperEngine, PLAYBACK_MODES
+from .wallpaper_engine import WallpaperEngine, FrameWallpaperEngine, PLAYBACK_MODES
 from . import load_config, save_config
 from . import icons
 from .detector import detect_environment
@@ -117,10 +117,19 @@ class WallpaperGUI(QWidget):
         super().__init__()
         self.env = env
         self.config = load_config()
-        self.engine = WallpaperEngine(desktop=env["desktop"])
+        self._wp_engine = WallpaperEngine(desktop=env["desktop"])
+        self._frame_engine = FrameWallpaperEngine()
+        self._use_frame_engine = self.config.get("show_icons", False) if env["desktop"] == "deepin" else False
+        if self._use_frame_engine:
+            self._wp_engine.hide()
         self._is_paused = False
+        self._current_video = None
         self._auto_advance_timer = QTimer()
         self._auto_advance_timer.timeout.connect(self._auto_advance)
+        self._mode_debounce = QTimer()
+        self._mode_debounce.setSingleShot(True)
+        self._mode_debounce.timeout.connect(self._apply_mode_debounce)
+        self._mode_debounce_val = None
         self._current_info = {}
         self.setAcceptDrops(True)
 
@@ -137,11 +146,44 @@ class WallpaperGUI(QWidget):
         self._build_ui()
         self._setup_shortcuts()
         self._setup_tray()
+        self._update_controls_for_mode()
         self._start_timer()
         self._sync_auto_advance()
 
         if self.config.get("last_video") and os.path.isfile(self.config["last_video"]):
             QTimer.singleShot(500, self._auto_start_last)
+
+    @property
+    def engine(self):
+        return self._frame_engine if self._use_frame_engine else self._wp_engine
+
+    def _switch_engine_mode(self, use_frame):
+        current_video = self._current_video
+        if self._wp_engine.is_running:
+            self._wp_engine.stop()
+        if self._frame_engine.is_running:
+            self._frame_engine.cleanup()
+        self._use_frame_engine = use_frame
+        self._update_controls_for_mode()
+        if current_video and os.path.isfile(current_video):
+            if use_frame:
+                self._wp_engine.hide()
+                self.engine.start(current_video, fps=self.config.get("frame_fps", 30))
+            else:
+                self.engine.start(current_video)
+                self._wp_engine.show()
+
+    def _update_controls_for_mode(self):
+        is_frame = self._use_frame_engine
+        self.btn_play.setEnabled(not is_frame and self.engine.is_running)
+        self.volume_slider.setEnabled(not is_frame)
+        self.btn_mute.setEnabled(not is_frame)
+        self.mode_combo.setEnabled(not is_frame)
+        self.brightness_slider.setEnabled(not is_frame)
+        self.contrast_slider.setEnabled(not is_frame)
+        self.blur_slider.setEnabled(not is_frame)
+        if hasattr(self, "fps_spin"):
+            self.fps_spin.setEnabled(is_frame)
 
     def _fix_palette(self):
         pal = QApplication.palette()
@@ -173,6 +215,11 @@ class WallpaperGUI(QWidget):
 
         self.title_bar = TitleBar(self)
         main_layout.addWidget(self.title_bar)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.NoFrame)
+        main_layout.addWidget(scroll)
 
         content = QWidget()
         cl = QVBoxLayout(content)
@@ -293,6 +340,24 @@ class WallpaperGUI(QWidget):
         aa_row.addStretch()
         cl.addLayout(aa_row)
 
+        if self.env["desktop"] == "deepin":
+            self.icons_cb = QCheckBox("Mostrar iconos (experimental)")
+            self.icons_cb.setChecked(self._use_frame_engine)
+            self.icons_cb.toggled.connect(self._on_icons_toggled)
+            cl.addWidget(self.icons_cb)
+
+            fps_row = QHBoxLayout()
+            fps_row.addWidget(QLabel("FPS iconos:"))
+            self.fps_spin = QSpinBox()
+            self.fps_spin.setRange(10, 180)
+            self.fps_spin.setValue(self.config.get("frame_fps", 30))
+            self.fps_spin.setSuffix(" fps")
+            self.fps_spin.setFixedWidth(75)
+            self.fps_spin.valueChanged.connect(self._on_fps_changed)
+            fps_row.addWidget(self.fps_spin)
+            fps_row.addStretch()
+            cl.addLayout(fps_row)
+
         cl.addWidget(self._sep())
 
         self.brightness_slider = self._make_slider("Brillo", cl, 0, 200,
@@ -323,7 +388,7 @@ class WallpaperGUI(QWidget):
         cl.addWidget(btn_quit)
 
         content.setLayout(cl)
-        main_layout.addWidget(content)
+        scroll.setWidget(content)
 
     def _sep(self):
         sep = QFrame()
@@ -415,10 +480,11 @@ class WallpaperGUI(QWidget):
             self.config["playlist_index"] = idx
             self.config["last_video"] = path
             save_config(self.config)
-            success = self.engine.start(path)
+            success = self.engine.start(path, fps=self.config.get("frame_fps", 30))
             if success:
+                self._current_video = path
                 self._is_paused = False
-                self.btn_play.setEnabled(True)
+                self.btn_play.setEnabled(not self._use_frame_engine)
                 self.btn_stop.setEnabled(True)
                 self.btn_play.setIcon(self.style().standardIcon(QStyle.SP_MediaPause))
                 self._update_video_display(path)
@@ -463,6 +529,17 @@ class WallpaperGUI(QWidget):
         save_config(self.config)
         self._refresh_playlist()
 
+    def _on_icons_toggled(self, checked):
+        self.config["show_icons"] = checked
+        save_config(self.config)
+        self._switch_engine_mode(checked)
+
+    def _on_fps_changed(self, val):
+        self.config["frame_fps"] = val
+        save_config(self.config)
+        if self._use_frame_engine and self._frame_engine.is_running:
+            self._frame_engine.set_fps(val)
+
     def _on_auto_advance_toggled(self, checked):
         self.config["auto_advance"] = checked
         save_config(self.config)
@@ -487,7 +564,9 @@ class WallpaperGUI(QWidget):
         modes = ["fill", "fit", "stretch", "center"]
         self.config["playback_mode"] = modes[index]
         save_config(self.config)
-        self.engine.update_filters(self.config)
+        if not self._use_frame_engine:
+            self._mode_debounce_val = modes[index]
+            self._mode_debounce.start(500)
 
     def _setup_tray(self):
         self.tray = None
@@ -501,19 +580,20 @@ class WallpaperGUI(QWidget):
             self.tray = None
 
     def _on_tray_activated(self, reason):
-        if reason == QSystemTrayIcon.DoubleClick:
-            if self.isVisible():
+        if reason in (QSystemTrayIcon.Trigger, QSystemTrayIcon.DoubleClick):
+            if self.isVisible() and not self.isMinimized():
                 self.hide()
             else:
-                self.show()
+                self.showNormal()
                 self.raise_()
                 self.activateWindow()
 
     def _auto_start_last(self):
         video = self.config.get("last_video", "")
         if video and os.path.isfile(video):
-            self.engine.start(video)
-            self.btn_play.setEnabled(True)
+            self.engine.start(video, fps=self.config.get("frame_fps", 30))
+            self._current_video = video
+            self.btn_play.setEnabled(not self._use_frame_engine)
             self.btn_stop.setEnabled(True)
             self.btn_play.setIcon(self.style().standardIcon(QStyle.SP_MediaPause))
             self._update_video_display(video)
@@ -533,10 +613,11 @@ class WallpaperGUI(QWidget):
                 self.config["playlist_index"] = self.config["playlist"].index(file_path)
             save_config(self.config)
             self._refresh_playlist()
-            success = self.engine.start(file_path)
+            success = self.engine.start(file_path, fps=self.config.get("frame_fps", 30))
             if success:
+                self._current_video = file_path
                 self._is_paused = False
-                self.btn_play.setEnabled(True)
+                self.btn_play.setEnabled(not self._use_frame_engine)
                 self.btn_stop.setEnabled(True)
                 self.btn_play.setIcon(self.style().standardIcon(QStyle.SP_MediaPause))
                 self._update_video_display(file_path)
@@ -561,6 +642,10 @@ class WallpaperGUI(QWidget):
         else:
             self.video_info_label.setText("")
 
+        if hasattr(self, "fps_spin") and info.get("fps"):
+            native = round(info["fps"])
+            self.fps_spin.setToolTip(f"FPS nativo del video: {native}")
+
     def _toggle_pause(self):
         if not self.engine.is_running:
             return
@@ -571,6 +656,7 @@ class WallpaperGUI(QWidget):
 
     def _stop(self):
         self.engine.stop()
+        self._current_video = None
         self._is_paused = False
         self.btn_play.setEnabled(False)
         self.btn_stop.setEnabled(False)
@@ -598,20 +684,27 @@ class WallpaperGUI(QWidget):
             save_config(self.config)
             self.engine.set_mute(False)
 
+    def _apply_mode_debounce(self):
+        if self._mode_debounce_val and self._current_video:
+            self._wp_engine.update_filters({"playback_mode": self._mode_debounce_val})
+
     def _on_brightness(self, val):
         self.config["brightness"] = val
-        self.engine.update_filters(self.config)
         self.brightness_slider._val_label.setText(str(val))
+        if not self._use_frame_engine:
+            self._wp_engine.set_brightness(val)
 
     def _on_contrast(self, val):
         self.config["contrast"] = val
-        self.engine.update_filters(self.config)
         self.contrast_slider._val_label.setText(str(val))
+        if not self._use_frame_engine:
+            self._wp_engine.set_contrast(val)
 
     def _on_blur(self, val):
         self.config["blur"] = val
-        self.engine.update_filters(self.config)
         self.blur_slider._val_label.setText(str(val))
+        if not self._use_frame_engine:
+            self._wp_engine.set_blur(val)
 
     def _reset_filters(self):
         self.config.update({"brightness": 100, "contrast": 100, "blur": 0})
@@ -619,7 +712,10 @@ class WallpaperGUI(QWidget):
         self.brightness_slider.setValue(100)
         self.contrast_slider.setValue(100)
         self.blur_slider.setValue(0)
-        self.engine.update_filters(self.config)
+        if not self._use_frame_engine:
+            self._wp_engine.set_brightness(100)
+            self._wp_engine.set_contrast(100)
+            self._wp_engine.set_blur(0)
 
     def _toggle_autostart(self, checked):
         self.config["autostart"] = checked
@@ -642,7 +738,9 @@ class WallpaperGUI(QWidget):
 
     def _quit(self):
         self._auto_advance_timer.stop()
-        self.engine.cleanup()
+        self._mode_debounce.stop()
+        self._wp_engine.cleanup()
+        self._frame_engine.cleanup()
         self.app_ref.quit()
 
     def _restore_geometry(self):

@@ -20,6 +20,8 @@ DEFAULT_CONFIG = {
     "auto_advance_seconds": 30,
     "playback_mode": "fill",
     "window_geometry": None,
+    "frame_fps": 30,
+    "show_icons": False,
 }
 
 

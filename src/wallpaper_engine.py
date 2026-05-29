@@ -4,6 +4,9 @@ import signal
 import time
 import json
 import socket
+import threading
+import shutil
+import tempfile
 from pathlib import Path
 from Xlib import X, display
 from Xlib import Xatom
@@ -151,35 +154,6 @@ class WallpaperEngine:
                 pass
 
         self._window = win
-        self._clear_wallpaper()
-
-    def _clear_wallpaper(self):
-        if self._desktop == "deepin":
-            try:
-                r = subprocess.run(
-                    ["gsettings", "get", GSETTINGS_SCHEMA, GSETTINGS_KEY],
-                    capture_output=True, text=True, timeout=2,
-                )
-                if r.returncode == 0:
-                    self._original_wallpaper = r.stdout.strip()
-                subprocess.run(
-                    ["gsettings", "set", GSETTINGS_SCHEMA, GSETTINGS_KEY, "@as []"],
-                    capture_output=True, timeout=2,
-                )
-            except Exception:
-                pass
-
-    def _restore_wallpaper(self):
-        if self._original_wallpaper:
-            try:
-                subprocess.run(
-                    ["gsettings", "set", GSETTINGS_SCHEMA, GSETTINGS_KEY,
-                     self._original_wallpaper],
-                    capture_output=True, timeout=2,
-                )
-            except Exception:
-                pass
-            self._original_wallpaper = None
 
     def _wait_ipc(self, timeout=3.0):
         start = time.time()
@@ -209,7 +183,7 @@ class WallpaperEngine:
         except Exception:
             return False
 
-    def start(self, video_path):
+    def start(self, video_path, **kwargs):
         self._stop_mpv()
 
         if not os.path.isfile(video_path):
@@ -295,7 +269,6 @@ class WallpaperEngine:
 
     def cleanup(self):
         self.stop()
-        self._restore_wallpaper()
         if self._window:
             try:
                 self._window.destroy()
@@ -323,9 +296,38 @@ class WallpaperEngine:
                 self._is_muted = False
                 self._send_ipc_command(["set_property", "mute", False])
 
+    def set_brightness(self, val):
+        self._filters["brightness"] = val
+        if self.is_running:
+            self._send_ipc_command(["set_property", "brightness", val - 100])
+
+    def set_contrast(self, val):
+        self._filters["contrast"] = val
+        if self.is_running:
+            self._send_ipc_command(["set_property", "contrast", val - 100])
+
+    def set_blur(self, val):
+        self._filters["blur"] = val
+        if self.is_running:
+            if val > 0:
+                self._send_ipc_command(["vf", "set", f"lavfi=boxblur={val}:{val}"])
+            else:
+                self._send_ipc_command(["vf", "clr"])
+
     def update_filters(self, filters):
-        self._filters = filters
-        if self._current_video:
+        needs_restart = False
+        for k, v in filters.items():
+            if k == "brightness":
+                self.set_brightness(v)
+            elif k == "contrast":
+                self.set_contrast(v)
+            elif k == "blur":
+                self.set_blur(v)
+            else:
+                self._filters[k] = v
+                if k == "playback_mode":
+                    needs_restart = True
+        if needs_restart and self._current_video:
             self.start(self._current_video)
 
     @property
@@ -339,3 +341,207 @@ class WallpaperEngine:
     @property
     def current_video(self):
         return self._current_video
+
+    @property
+    def mode(self):
+        return "video"
+
+    def hide(self):
+        if self._window:
+            try:
+                self._window.unmap()
+                self._display.sync()
+            except Exception:
+                pass
+
+    def show(self):
+        if self._window:
+            try:
+                self._window.map()
+                self._display.sync()
+            except Exception:
+                pass
+
+
+class FrameWallpaperEngine:
+    MAX_FRAMES = 2000
+
+    def __init__(self):
+        self._running = False
+        self._thread = None
+        self._ffmpeg_proc = None
+        self._frame_dir = Path(tempfile.gettempdir()) / "wp-dinamicos-frames"
+        self._frames = []
+        self._original_wallpaper = None
+        self._current_video = None
+        self._fps = 5
+        self._frame_counter = 0
+
+    def start(self, video_path, fps=60):
+        self.stop()
+        if not os.path.isfile(video_path):
+            return False
+
+        self._fps = fps
+        self._current_video = video_path
+        self._frame_counter = 0
+        self._save_wallpaper()
+        self._frame_dir.mkdir(parents=True, exist_ok=True)
+        for f in self._frame_dir.iterdir():
+            f.unlink(missing_ok=True)
+
+        output_pattern = str(self._frame_dir / "frame_%d.jpg")
+        cmd = [
+            "ffmpeg",
+            "-i", video_path,
+            "-vf", f"fps={fps}",
+            "-q:v", "5",
+            "-y", output_pattern,
+        ]
+        try:
+            self._ffmpeg_proc = subprocess.Popen(
+                cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+            )
+        except Exception as e:
+            print(f"Error al iniciar ffmpeg: {e}")
+            return False
+
+        try:
+            self._ffmpeg_proc.wait(timeout=60)
+        except Exception:
+            self._ffmpeg_proc.kill()
+            self._ffmpeg_proc.wait()
+        self._ffmpeg_proc = None
+
+        self._frames = sorted(
+            self._frame_dir.glob("frame_*.jpg"),
+            key=lambda p: int(p.stem.split("_")[1]),
+        )
+        if not self._frames:
+            print("No se generaron frames")
+            return False
+
+        if len(self._frames) > self.MAX_FRAMES:
+            keep = self._frames[::len(self._frames) // self.MAX_FRAMES + 1]
+            for old in self._frames:
+                if old not in keep:
+                    old.unlink(missing_ok=True)
+            self._frames = keep
+
+        self._running = True
+        self._thread = threading.Thread(target=self._update_loop, daemon=True)
+        self._thread.start()
+        return True
+
+    def _update_loop(self):
+        import time as _time
+        interval = 1.0 / self._fps
+        total = len(self._frames)
+        while self._running and total > 0:
+            try:
+                idx = self._frame_counter % total
+                self._set_wallpaper(self._frames[idx])
+                self._frame_counter += 1
+            except Exception:
+                pass
+            _time.sleep(interval)
+
+    def set_fps(self, fps):
+        self._fps = max(1, min(fps, 180))
+
+    def _set_wallpaper(self, path):
+        uri = f"file://{path}"
+        try:
+            subprocess.run(
+                ["dbus-send", "--session", "--dest=org.deepin.dde.Appearance1",
+                 "--type=method_call", "--print-reply",
+                 "/org/deepin/dde/Appearance1",
+                 "org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground",
+                 f"string:{uri}"],
+                capture_output=True, timeout=2,
+            )
+        except Exception:
+            pass
+
+    def stop(self):
+        self._running = False
+        if self._thread:
+            self._thread.join(timeout=3)
+            self._thread = None
+        if self._ffmpeg_proc:
+            self._ffmpeg_proc.terminate()
+            try:
+                self._ffmpeg_proc.wait(timeout=3)
+            except Exception:
+                try:
+                    self._ffmpeg_proc.kill()
+                except Exception:
+                    pass
+            self._ffmpeg_proc = None
+        self._restore_wallpaper()
+
+    def cleanup(self):
+        self.stop()
+        try:
+            shutil.rmtree(self._frame_dir, ignore_errors=True)
+        except Exception:
+            pass
+
+    def _save_wallpaper(self):
+        try:
+            r = subprocess.run(
+                ["gsettings", "get", GSETTINGS_SCHEMA, GSETTINGS_KEY],
+                capture_output=True, text=True, timeout=2,
+            )
+            if r.returncode == 0:
+                val = r.stdout.strip()
+                if val.startswith("@as"):
+                    self._original_wallpaper = None
+                else:
+                    self._original_wallpaper = val
+        except Exception:
+            pass
+
+    def _restore_wallpaper(self):
+        if self._original_wallpaper:
+            try:
+                uri = self._original_wallpaper.strip("[]").strip("'\"")
+                subprocess.run(
+                    ["dbus-send", "--session", "--dest=org.deepin.dde.Appearance1",
+                     "--type=method_call", "--print-reply",
+                     "/org/deepin/dde/Appearance1",
+                     "org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground",
+                     f"string:{uri}"],
+                    capture_output=True, timeout=2,
+                )
+            except Exception:
+                pass
+            self._original_wallpaper = None
+
+    @property
+    def is_running(self):
+        return self._running
+
+    @property
+    def current_video(self):
+        return self._current_video
+
+    @property
+    def is_paused(self):
+        return False
+
+    @property
+    def mode(self):
+        return "frame"
+
+    def pause(self):
+        pass
+
+    def set_mute(self, muted):
+        pass
+
+    def set_volume(self, volume):
+        pass
+
+    def update_filters(self, filters):
+        pass
