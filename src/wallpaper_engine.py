@@ -591,30 +591,26 @@ class FrameWallpaperEngine:
         self._skip = 5
 
         uri = f"file://{path}"
-        print(f"[WP] gsettings set {uri}")
+        print(f"[WP] SET wallpaper {uri}")
         try:
-            r = subprocess.run(
+            subprocess.run(
                 ["gsettings", "set", GSETTINGS_SCHEMA, GSETTINGS_KEY,
                  f"['{uri}']"],
-                capture_output=True, text=True, timeout=1,
+                capture_output=True, timeout=1,
             )
-            if r.returncode != 0:
-                print(f"[WP] gsettings fallo: {r.stderr.strip()}")
-                raise Exception("gsettings failed")
-            print(f"[WP] gsettings OK")
         except Exception:
-            print(f"[WP] fallback dbus-send...")
-            try:
-                subprocess.run(
-                    ["dbus-send", "--session", "--dest=org.deepin.dde.Appearance1",
-                     "--type=method_call", "--print-reply",
-                     "/org/deepin/dde/Appearance1",
-                     "org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground",
-                     f"string:{uri}"],
-                    capture_output=True, timeout=1,
-                )
-            except Exception:
-                print(f"[WP] dbus-send tambien fallo")
+            pass
+        try:
+            subprocess.run(
+                ["dbus-send", "--session", "--dest=org.deepin.dde.Appearance1",
+                 "--type=method_call", "--print-reply",
+                 "/org/deepin/dde/Appearance1",
+                 "org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground",
+                 f"string:{uri}"],
+                capture_output=True, timeout=1,
+            )
+        except Exception:
+            pass
 
     def stop(self, skip_restore=False):
         print(f"[WP] stop(skip_restore={skip_restore})")
