@@ -201,7 +201,8 @@ class WallpaperGUI(QWidget):
 
         if current_video and os.path.isfile(current_video):
             if use_frame:
-                self.engine.start(current_video, fps=self.config.get("frame_fps", 30))
+                self.engine.start(current_video, fps=self.config.get("frame_fps", 30),
+                                  on_complete=self._update_controls_for_mode)
             else:
                 self.engine.start(current_video)
 

@@ -193,8 +193,6 @@ class WallpaperEngine:
         return False
 
     def _send_ipc_command(self, command):
-        if not self._ipc_ready:
-            return False
         payload = json.dumps({"command": command}) + "\n"
         try:
             sock = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
@@ -202,6 +200,7 @@ class WallpaperEngine:
             sock.connect(self._ipc_socket)
             sock.sendall(payload.encode())
             sock.close()
+            self._ipc_ready = True
             return True
         except Exception:
             return False
@@ -418,6 +417,8 @@ class FrameWallpaperEngine:
         self._running = False
         self._timer = None
         self._ffmpeg_proc = None
+        self._ffmpeg_checker = None
+        self._on_complete = None
         self._frame_dir = Path(tempfile.gettempdir()) / "wp-dinamicos-frames"
         self._frames = []
         self._original_wallpaper = None
@@ -425,7 +426,7 @@ class FrameWallpaperEngine:
         self._fps = 5
         self._frame_counter = 0
 
-    def start(self, video_path, fps=60):
+    def start(self, video_path, fps=60, on_complete=None):
         self.stop()
         if not os.path.isfile(video_path):
             return False
@@ -433,6 +434,7 @@ class FrameWallpaperEngine:
         self._fps = fps
         self._current_video = video_path
         self._frame_counter = 0
+        self._on_complete = on_complete
         self._save_wallpaper()
         self._frame_dir.mkdir(parents=True, exist_ok=True)
         for f in self._frame_dir.iterdir():
@@ -454,12 +456,26 @@ class FrameWallpaperEngine:
             print(f"Error al iniciar ffmpeg: {e}")
             return False
 
-        try:
-            self._ffmpeg_proc.wait(timeout=60)
-        except Exception:
-            self._ffmpeg_proc.kill()
-            self._ffmpeg_proc.wait()
-        self._ffmpeg_proc = None
+        from PyQt6.QtCore import QTimer
+        self._ffmpeg_checker = QTimer()
+        self._ffmpeg_checker.timeout.connect(self._on_ffmpeg_check)
+        self._ffmpeg_checker.start(100)
+        return True
+
+    def _on_ffmpeg_check(self):
+        if self._ffmpeg_proc and self._ffmpeg_proc.poll() is None:
+            return
+        if self._ffmpeg_checker:
+            self._ffmpeg_checker.stop()
+            self._ffmpeg_checker = None
+
+        if self._ffmpeg_proc:
+            try:
+                self._ffmpeg_proc.wait(timeout=5)
+            except Exception:
+                self._ffmpeg_proc.kill()
+                self._ffmpeg_proc.wait()
+            self._ffmpeg_proc = None
 
         self._frames = sorted(
             self._frame_dir.glob("frame_*.jpg"),
@@ -467,7 +483,7 @@ class FrameWallpaperEngine:
         )
         if not self._frames:
             print("No se generaron frames")
-            return False
+            return
 
         if len(self._frames) > self.MAX_FRAMES:
             keep = self._frames[::len(self._frames) // self.MAX_FRAMES + 1]
@@ -486,7 +502,9 @@ class FrameWallpaperEngine:
             self._timer = None
             self._thread = threading.Thread(target=self._update_loop, daemon=True)
             self._thread.start()
-        return True
+
+        if self._on_complete:
+            self._on_complete()
 
     def _update_frame(self):
         if not self._running or not self._frames:
@@ -546,6 +564,9 @@ class FrameWallpaperEngine:
         if self._timer:
             self._timer.stop()
             self._timer = None
+        if self._ffmpeg_checker:
+            self._ffmpeg_checker.stop()
+            self._ffmpeg_checker = None
         if self._ffmpeg_proc:
             self._ffmpeg_proc.terminate()
             try:
