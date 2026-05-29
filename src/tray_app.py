@@ -708,7 +708,7 @@ class WallpaperGUI(QWidget):
     def _add_to_playlist(self):
         files, _ = QFileDialog.getOpenFileUrls(
             self, "Agregar Videos",
-            str(Path.home() / "Videos"),
+            QUrl.fromLocalFile(str(Path.home() / "Videos")),
             "Videos (*.mp4 *.webm *.mkv *.avi *.mov);;Todos (*)",
         )
         for f in files:
