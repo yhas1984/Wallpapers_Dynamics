@@ -3,8 +3,13 @@ import json
 import os
 from pathlib import Path
 
+_video_info_cache = {}
+
 
 def get_video_info(video_path):
+    if video_path in _video_info_cache:
+        return _video_info_cache[video_path]
+    
     result = {"duration": 0, "width": 0, "height": 0, "fps": 0}
     if not os.path.isfile(video_path):
         return result
@@ -27,6 +32,7 @@ def get_video_info(video_path):
                     if len(parts) == 2 and float(parts[1]) > 0:
                         result["fps"] = round(float(parts[0]) / float(parts[1]), 2)
                 break
+        _video_info_cache[video_path] = result
     except Exception:
         pass
     return result
