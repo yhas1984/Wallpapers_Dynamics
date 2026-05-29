@@ -94,28 +94,7 @@ class WallpaperEngine:
             self._root = self._screen.root
         w, h = self._get_screen_geometry()
 
-        if self._icon_mode:
-            dw = self._find_desktop_window()
-            if dw:
-                win = dw.create_window(
-                    0, 0, w, h, 0,
-                    X.CopyFromParent,
-                    X.InputOutput,
-                    X.CopyFromParent,
-                    background_pixel=self._screen.black_pixel,
-                    event_mask=X.ExposureMask | X.StructureNotifyMask,
-                )
-            else:
-                win = self._root.create_window(
-                    0, 0, w, h, 0,
-                    X.CopyFromParent,
-                    X.InputOutput,
-                    X.CopyFromParent,
-                    background_pixel=self._screen.black_pixel,
-                    event_mask=X.ExposureMask | X.StructureNotifyMask,
-                )
-        else:
-            win = self._root.create_window(
+        win = self._root.create_window(
             0, 0, w, h, 0,
             X.CopyFromParent,
             X.InputOutput,
@@ -152,6 +131,32 @@ class WallpaperEngine:
         win.map()
         self._display.sync()
         time.sleep(0.3)
+
+        if self._icon_mode:
+            desktop_win = self._find_desktop_window()
+            if desktop_win:
+                try:
+                    desk_frame = desktop_win
+                    while True:
+                        p = desk_frame.query_tree().parent
+                        if not p or p.id == self._root.id:
+                            break
+                        desk_frame = p
+                except Exception:
+                    desk_frame = None
+                if desk_frame and desk_frame.id != win.id:
+                    restack = self._display.intern_atom("_NET_RESTACK_WINDOW")
+                    ev = xevent.ClientMessage(
+                        display=self._display,
+                        window=win,
+                        client_type=restack,
+                        data=(32, [2, desk_frame.id, 1, 0, 0]),
+                    )
+                    mask = X.SubstructureRedirectMask | X.SubstructureNotifyMask
+                    self._root.send_event(ev, event_mask=mask)
+                    self._display.sync()
+            self._window = win
+            return
 
         our_frame = win
         try:
