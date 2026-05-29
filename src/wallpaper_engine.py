@@ -206,11 +206,17 @@ class WallpaperEngine:
             return False
 
     def start(self, video_path, fps=None, **kwargs):
-        self._stop_mpv()
-
         if not os.path.isfile(video_path):
             print(f"Video no encontrado: {video_path}")
             return False
+
+        if self.is_running:
+            self._filters["playback_mode"] = kwargs.get("playback_mode", self._filters.get("playback_mode", "fill"))
+            self._filters["muted"] = kwargs.get("muted", self._filters.get("muted", True))
+            if self._playlist_advance(video_path):
+                return True
+
+        self._stop_mpv()
 
         if not self._window:
             self._setup_window()
@@ -266,6 +272,29 @@ class WallpaperEngine:
             return True
         except Exception as e:
             print(f"Error al iniciar mpv: {e}")
+            return False
+
+    def _playlist_advance(self, video_path):
+        was_muted = self._is_muted
+        try:
+            self._send_ipc_command(["loadfile", video_path, "replace"])
+            self._send_ipc_command(["set_property", "loop", "inf"])
+            b = self._filters.get("brightness", 100)
+            c = self._filters.get("contrast", 100)
+            if b != 100:
+                self._send_ipc_command(["set_property", "brightness", b - 100])
+            if c != 100:
+                self._send_ipc_command(["set_property", "contrast", c - 100])
+            bl = self._filters.get("blur", 0)
+            if bl > 0:
+                self._send_ipc_command(["set_property", "vf", f"boxblur={bl}:{bl}"])
+            else:
+                self._send_ipc_command(["set_property", "vf", ""])
+            self._current_video = video_path
+            self._is_paused = False
+            self._is_muted = was_muted
+            return True
+        except Exception:
             return False
 
     def _apply_initial_filters(self):
