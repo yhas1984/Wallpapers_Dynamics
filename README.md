@@ -1,39 +1,41 @@
 # Wallpapers Dynamics
 
-Reproductor de video como fondo de pantalla animado para Linux. Funciona en Deepin, KDE Plasma, GNOME, XFCE y otros entornos de escritorio X11 (y Wayland en modo iconos).
+Reproductor de video como fondo de pantalla animado para Linux. Compatible con X11 y Wayland.
 
 ![Wallpaper Dinamicos](screenshot.jpg)
 
 ## Características
 
 - **Video como wallpaper** — reproduce videos MP4, WebM, MKV, AVI, MOV como fondo de escritorio real
-- **Modo iconos (Deepin)** — extrae frames del video y los muestra vía D-Bus (`SetCurrentWorkspaceBackground`), permitiendo que los iconos del escritorio sean visibles encima. Compatible con Wayland
-- **Inicio minimizado** — arranca en la bandeja del sistema por defecto
-- **Bandeja del sistema** — control mínimo desde la bandeja, GUI completa al hacer clic
-- **Playlist** — lista de reproducción con auto-avance configurable (5s–3600s)
+- **Dos modos de reproducción**: mpv embebido (X11, fluido) o extracción de frames vía D-Bus (X11/Wayland, compatible con iconos del escritorio)
+- **Filtros en vivo** — brillo, contraste, blur (vía mpv IPC, sin reiniciar). Cambiar blur ya no pierde brillo/contraste
 - **Modos de reproducción** — Fill, Fit, Stretch, Center
-- **Filtros en vivo** — brillo, contraste, blur (vía mpv IPC, sin reiniciar)
+- **Playlist** — lista de reproducción con auto-avance configurable (5s–3600s)
 - **FPS configurables** — 10–180 fps para el modo iconos
 - **Volumen** — control deslizante con mute automático
 - **Atajos de teclado** — Ctrl+O (abrir), Espacio (pausa), Ctrl+Q (salir), Ctrl+←/→ (anterior/siguiente), Ctrl+M (silencio)
 - **Drag & Drop** — arrastra videos directamente a la ventana
+- **Inicio minimizado** — arranca en la bandeja del sistema por defecto
 - **Persistencia** — guarda configuración, geometría de ventana, playlist y último video
-- **Tema adaptable** — detecta modo oscuro/claro del sistema y ajusta colores
+- **Tema adaptable** — detecta modo oscuro/claro del sistema y ajusta colores vía QSS (PyQt6)
+- **Interfaz moderna** — bordes redondeados, hover effects, sliders personalizados, scrollbar estilizado
 - **Cross-desktop** — Deepin, KDE, GNOME, XFCE, Cinnamon y más
 - **No inhibe suspensión** — el sistema puede suspender normalmente mientras se reproduce el video
+- **D-Bus nativo** — usa python-dbus en lugar de subprocess, hasta 100x más rápido en modo iconos
 - **Auto-inicio** — opción para iniciar con la sesión
+- **Ejecutable standalone** — compilable con PyInstaller
 
 ## Modos de funcionamiento
 
 ### Modo normal (sin iconos)
-Usa mpv directamente incrustado en una ventana X11 del escritorio. Video fluido a fps nativos, con filtros, audio y controles completos. Los iconos del escritorio quedan debajo de la ventana de video.
+Usa mpv directamente incrustado en una ventana X11 del escritorio. Video fluido a fps nativos, con filtros, audio y controles completos. Los iconos del escritorio quedan debajo de la ventana de video. Solo X11.
 
-### Modo iconos (experimental, solo Deepin)
-Extrae frames del video con ffmpeg y los muestra como fondo de escritorio vía D-Bus de Deepin (`org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground`). Los iconos del escritorio quedan visibles encima. Sin audio, sin pausa, sin filtros — solo el video como fondo animado. FPS configurables (10–180). Compatible con Wayland.
+### Modo iconos (experimental, Deepin)
+Extrae frames del video con ffmpeg y los muestra como fondo de escritorio vía D-Bus de Deepin (`org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground`). Los iconos del escritorio quedan visibles encima. Sin audio, sin pausa, sin filtros — solo el video como fondo animado. FPS configurables (10–180). Compatible con **X11 y Wayland**.
 
 ## Requisitos
 
-- **Sistema**: Linux con X11 o Wayland (modo iconos)
+- **Sistema**: Linux con X11 o Wayland
 - **Python**: 3.9+
 - **Dependencias del sistema**:
 
@@ -71,8 +73,6 @@ Para iniciar con la ventana visible, edita `~/.config/wallpaper-dinamicos/config
 
 ### Ejecutable standalone
 
-También se puede generar un ejecutable independiente:
-
 ```bash
 pyinstaller wallpaper-dinamicos.spec --noconfirm
 ./dist/wallpaper-dinamicos
@@ -83,15 +83,16 @@ pyinstaller wallpaper-dinamicos.spec --noconfirm
 ```
 ├── run.py                      # Punto de entrada
 ├── requirements.txt            # Dependencias Python
+├── wallpaper-dinamicos.spec    # Configuración de PyInstaller
+├── screenshot.jpg              # Captura de pantalla
 ├── src/
 │   ├── __init__.py             # Configuración persistente (JSON)
 │   ├── detector.py             # Detección de escritorio/display/tema
-│   ├── wallpaper_engine.py     # Motor X11 (mpv) + FrameWallpaperEngine (D-Bus)
-│   ├── tray_app.py             # GUI (PyQt6), bandeja, playlist
-│   ├── utils.py                # Metadatos de video, notificaciones
-│   └── icons.py                # Iconos generados programáticamente
-├── wallpaper-dinamicos.spec    # Configuración de PyInstaller
-└── .gitignore
+│   ├── wallpaper_engine.py     # WallpaperEngine (mpv) + FrameWallpaperEngine (D-Bus)
+│   ├── tray_app.py             # GUI (PyQt6), bandeja, playlist, QSS
+│   ├── utils.py                # Metadatos de video, notificaciones, thumbnail
+│   └── icons.py                # Iconos vectoriales programáticos
+└── samples/                    # Videos de ejemplo
 ```
 
 ## Configuración
@@ -127,14 +128,14 @@ El archivo de configuración se guarda en `~/.config/wallpaper-dinamicos/config.
 - Verifica que la opción `--stop-screensaver=no` esté activa en mpv (configurado por defecto en v1.2+)
 
 **Los iconos del escritorio no se ven (modo iconos):**
-- Verifica que estés en Deepin V23 con dde-shell
+- Verifica que estés en Deepin V23+ con dde-shell
 - Prueba subir los FPS si el video se ve entrecortado
 
 **La app no se restaura desde la bandeja:**
 - En Deepin, haz clic simple en el icono de la bandeja (no doble clic)
 
 **Error "cannot connect to X server":**
-- Ejecuta la app desde una sesión gráfica, no desde SSH sin `-X`
+- Ejecuta la app desde una sesión gráfica, no desde SSH sin `-X`. En Wayland no aplica.
 
 **Error de import PyQt6:**
 - Instala PyQt6: `sudo apt install python3-pyqt6` o `pip install PyQt6`
