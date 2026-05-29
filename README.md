@@ -1,13 +1,14 @@
 # Wallpapers Dynamics
 
-Reproductor de video como fondo de pantalla animado para Linux. Funciona en Deepin, KDE Plasma, GNOME, XFCE y otros entornos de escritorio X11.
+Reproductor de video como fondo de pantalla animado para Linux. Funciona en Deepin, KDE Plasma, GNOME, XFCE y otros entornos de escritorio X11 (y Wayland en modo iconos).
 
 ![Wallpaper Dinamicos](screenshot.jpg)
 
 ## Características
 
 - **Video como wallpaper** — reproduce videos MP4, WebM, MKV, AVI, MOV como fondo de escritorio real
-- **Modo iconos (Deepin)** — extrae frames del video y los muestra vía D-Bus (`SetCurrentWorkspaceBackground`), permitiendo que los iconos del escritorio sean visibles encima
+- **Modo iconos (Deepin)** — extrae frames del video y los muestra vía D-Bus (`SetCurrentWorkspaceBackground`), permitiendo que los iconos del escritorio sean visibles encima. Compatible con Wayland
+- **Inicio minimizado** — arranca en la bandeja del sistema por defecto
 - **Bandeja del sistema** — control mínimo desde la bandeja, GUI completa al hacer clic
 - **Playlist** — lista de reproducción con auto-avance configurable (5s–3600s)
 - **Modos de reproducción** — Fill, Fit, Stretch, Center
@@ -19,6 +20,7 @@ Reproductor de video como fondo de pantalla animado para Linux. Funciona en Deep
 - **Persistencia** — guarda configuración, geometría de ventana, playlist y último video
 - **Tema adaptable** — detecta modo oscuro/claro del sistema y ajusta colores
 - **Cross-desktop** — Deepin, KDE, GNOME, XFCE, Cinnamon y más
+- **No inhibe suspensión** — el sistema puede suspender normalmente mientras se reproduce el video
 - **Auto-inicio** — opción para iniciar con la sesión
 
 ## Modos de funcionamiento
@@ -27,23 +29,23 @@ Reproductor de video como fondo de pantalla animado para Linux. Funciona en Deep
 Usa mpv directamente incrustado en una ventana X11 del escritorio. Video fluido a fps nativos, con filtros, audio y controles completos. Los iconos del escritorio quedan debajo de la ventana de video.
 
 ### Modo iconos (experimental, solo Deepin)
-Extrae frames del video con ffmpeg y los muestra como fondo de escritorio vía D-Bus de Deepin (`org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground`). Los iconos del escritorio quedan visibles encima. Sin audio, sin pausa, sin filtros — solo el video como fondo animado. FPS configurables (10–180).
+Extrae frames del video con ffmpeg y los muestra como fondo de escritorio vía D-Bus de Deepin (`org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground`). Los iconos del escritorio quedan visibles encima. Sin audio, sin pausa, sin filtros — solo el video como fondo animado. FPS configurables (10–180). Compatible con Wayland.
 
 ## Requisitos
 
-- **Sistema**: Linux con X11 (Wayland no soportado aún)
+- **Sistema**: Linux con X11 o Wayland (modo iconos)
 - **Python**: 3.9+
 - **Dependencias del sistema**:
 
 ```bash
 # Debian/Ubuntu/Deepin
-sudo apt install mpv ffmpeg libnotify-bin python3-pyqt5 python3-xlib
+sudo apt install mpv ffmpeg libnotify-bin python3-pyqt6 python3-xlib python3-dbus
 
 # Arch
-sudo pacman -S mpv ffmpeg libnotify python-pyqt5 python-xlib
+sudo pacman -S mpv ffmpeg libnotify python-pyqt6 python-xlib python-dbus
 
 # Fedora
-sudo dnf install mpv ffmpeg libnotify python3-qt5 python3-xlib
+sudo dnf install mpv ffmpeg libnotify python3-qt6 python3-xlib python3-dbus
 ```
 
 ## Instalación
@@ -60,16 +62,19 @@ pip install -r requirements.txt --break-system-packages
 python3 run.py
 ```
 
+La aplicación inicia minimizada en la bandeja del sistema. Haz doble clic en el icono para abrir el panel.
 Arrastra un video a la ventana o haz clic en "Seleccionar" para elegir uno. El video se mostrará como fondo de escritorio al instante.
 
 Para cerrar al system tray, solo cierra la ventana (clic en el icono de la bandeja para reabrir).
+
+Para iniciar con la ventana visible, edita `~/.config/wallpaper-dinamicos/config.json` y cambia `start_minimized` a `false`.
 
 ### Ejecutable standalone
 
 También se puede generar un ejecutable independiente:
 
 ```bash
-pyinstaller --onefile --name "wallpaper-dinamicos" --windowed run.py
+pyinstaller wallpaper-dinamicos.spec --noconfirm
 ./dist/wallpaper-dinamicos
 ```
 
@@ -82,9 +87,10 @@ pyinstaller --onefile --name "wallpaper-dinamicos" --windowed run.py
 │   ├── __init__.py             # Configuración persistente (JSON)
 │   ├── detector.py             # Detección de escritorio/display/tema
 │   ├── wallpaper_engine.py     # Motor X11 (mpv) + FrameWallpaperEngine (D-Bus)
-│   ├── tray_app.py             # GUI (PyQt5), bandeja, playlist
+│   ├── tray_app.py             # GUI (PyQt6), bandeja, playlist
 │   ├── utils.py                # Metadatos de video, notificaciones
 │   └── icons.py                # Iconos generados programáticamente
+├── wallpaper-dinamicos.spec    # Configuración de PyInstaller
 └── .gitignore
 ```
 
@@ -99,6 +105,7 @@ El archivo de configuración se guarda en `~/.config/wallpaper-dinamicos/config.
 | `volume` | int | `50` | Volumen (0–100) |
 | `brightness` | int | `100` | Brillo (0–200) |
 | `contrast` | int | `100` | Contraste (0–200) |
+| `saturation` | int | `100` | Saturación (0–200) |
 | `blur` | int | `0` | Desenfoque (0–20) |
 | `playback_mode` | string | `"fill"` | Modo: fill/fit/stretch/center |
 | `playlist` | array | `[]` | Lista de rutas de video |
@@ -107,6 +114,7 @@ El archivo de configuración se guarda en `~/.config/wallpaper-dinamicos/config.
 | `autostart` | bool | `false` | Iniciar con la sesión |
 | `show_icons` | bool | `false` | Modo iconos (Deepin) |
 | `frame_fps` | int | `30` | FPS del modo iconos (10–180) |
+| `start_minimized` | bool | `true` | Iniciar minimizado en la bandeja |
 
 ## Solución de problemas
 
@@ -114,6 +122,9 @@ El archivo de configuración se guarda en `~/.config/wallpaper-dinamicos/config.
 - Verifica que estás en X11 (`echo $XDG_SESSION_TYPE`)
 - Ejecuta desde terminal para ver errores: `python3 run.py`
 - Asegúrate de que mpv esté instalado: `mpv --version`
+
+**La laptop no entra en suspensión:**
+- Verifica que la opción `--stop-screensaver=no` esté activa en mpv (configurado por defecto en v1.2+)
 
 **Los iconos del escritorio no se ven (modo iconos):**
 - Verifica que estés en Deepin V23 con dde-shell
@@ -124,6 +135,9 @@ El archivo de configuración se guarda en `~/.config/wallpaper-dinamicos/config.
 
 **Error "cannot connect to X server":**
 - Ejecuta la app desde una sesión gráfica, no desde SSH sin `-X`
+
+**Error de import PyQt6:**
+- Instala PyQt6: `sudo apt install python3-pyqt6` o `pip install PyQt6`
 
 ## Licencia
 
