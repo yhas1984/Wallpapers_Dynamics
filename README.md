@@ -15,8 +15,8 @@
 **EN:** Download the `.deb` package from [GitHub Releases](https://github.com/yhas1984/Wallpapers_Dynamics/releases) and install:
 
 ```bash
-curl -LO https://github.com/yhas1984/Wallpapers_Dynamics/releases/download/v1.0.2/wallpaper-dinamicos-1.0.1.deb
-sudo dpkg -i wallpaper-dinamicos-1.0.1.deb
+curl -LO https://github.com/yhas1984/Wallpapers_Dynamics/releases/download/v1.0.2/wallpaper-dinamicos-1.0.2.deb
+sudo dpkg -i wallpaper-dinamicos-1.0.2.deb
 sudo apt install -f
 # Run: wallpaper-dinamicos
 ```
@@ -82,8 +82,8 @@ sudo dnf install mpv ffmpeg libnotify python3-qt6 python3-xlib python3-dbus
 ### Desde .deb (recomendado / recommended)
 
 ```bash
-curl -LO https://github.com/yhas1984/Wallpapers_Dynamics/releases/download/v1.0.2/wallpaper-dinamicos-1.0.1.deb
-sudo dpkg -i wallpaper-dinamicos-1.0.1.deb
+curl -LO https://github.com/yhas1984/Wallpapers_Dynamics/releases/download/v1.0.2/wallpaper-dinamicos-1.0.2.deb
+sudo dpkg -i wallpaper-dinamicos-1.0.2.deb
 sudo apt install -f
 wallpaper-dinamicos
 ```
