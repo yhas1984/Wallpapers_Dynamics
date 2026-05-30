@@ -1,5 +1,7 @@
 #!/bin/bash
 set -e
 
-# Kill running instance
-pkill -f "wallpaper-dinamicos" 2>/dev/null || true
+# Kill running instance (with timeout)
+timeout 3 pkill -f "wallpaper-dinamicos" 2>/dev/null || true
+
+exit 0
