@@ -6,7 +6,7 @@ from PyQt6.QtWidgets import (
     QLabel, QPushButton, QFrame, QSlider, QCheckBox,
     QFileDialog, QSystemTrayIcon, QComboBox, QListWidget,
     QListWidgetItem, QAbstractItemView, QMenu,
-    QSpinBox, QStyle, QScrollArea, QMessageBox,
+    QSpinBox, QStyle, QScrollArea, QMessageBox, QSizeGrip,
 )
 from PyQt6.QtGui import (
     QIcon, QPixmap, QPainter, QColor, QPalette,
@@ -163,9 +163,8 @@ class WallpaperGUI(QWidget):
         self.setWindowTitle("Wallpaper Dinamicos")
         self.setWindowIcon(icons.icon_app(48))
         self.setObjectName("MainWindow")
-        self.setMinimumSize(300, 520)
-        self.setMaximumSize(400, 720)
-        self.resize(320, 580)
+        self.setMinimumSize(320, 400)
+        self.resize(380, 600)
         self.setWindowFlags(Qt.WindowType.FramelessWindowHint)
         self.setAutoFillBackground(True)
 
@@ -478,6 +477,10 @@ class WallpaperGUI(QWidget):
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
         main_layout.addWidget(scroll)
+
+        grip = QSizeGrip(self)
+        grip.setFixedSize(16, 16)
+        main_layout.addWidget(grip, alignment=Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignBottom)
 
         content = QWidget()
         cl = QVBoxLayout(content)
