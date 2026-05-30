@@ -1,4 +1,3 @@
 #!/bin/bash
-# Allow system to suspend
-loginctl set-idle-hint yes 2>/dev/null || true
+timeout 3 loginctl set-idle-hint yes 2>/dev/null || true
 exec /usr/lib/wallpaper-dinamicos/wallpaper-dinamicos "$@"
