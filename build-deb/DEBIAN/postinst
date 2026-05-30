@@ -1,0 +1,11 @@
+#!/bin/bash
+set -e
+
+# Update desktop database
+update-desktop-database -q /usr/share/applications 2>/dev/null || true
+
+# Update icon cache
+gtk-update-icon-cache -q -f /usr/share/icons/hicolor 2>/dev/null || true
+
+echo "Wallpaper Dinamicos instalado correctamente."
+echo "Ejecuta 'wallpaper-dinamicos' desde la terminal o desde el menu de aplicaciones."

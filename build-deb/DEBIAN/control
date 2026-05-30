@@ -1,0 +1,15 @@
+Package: wallpaper-dinamicos
+Version: 1.0.0
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: yhas <ymiy2021@gmail.com>
+Depends: mpv, ffmpeg, libnotify-bin, python3-pyqt6, python3-xlib, python3-dbus
+Description: Video wallpaper player for Linux
+ Reproduce videos como fondo de pantalla animado para
+ Deepin, KDE, GNOME y otros escritorios Linux.
+ .
+ Incluye modo iconos para Deepin (dde-shell),
+ control por bandeja del sistema, playlist,
+ filtros en vivo (brillo, contraste, blur)
+ y auto-inicio con la sesion.

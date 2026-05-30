@@ -9,3 +9,4 @@ build/
 *.spec
 samples/*.mp4
 samples/*.webm
+*.deb

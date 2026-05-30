@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=Wallpaper Dinamicos
+Comment=Video wallpaper player for Linux
+Exec=/usr/bin/wallpaper-dinamicos
+Icon=wallpaper-dinamicos
+Categories=Utility;AudioVideo;
+Terminal=false
+StartupNotify=false

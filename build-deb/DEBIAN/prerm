@@ -1,0 +1,5 @@
+#!/bin/bash
+set -e
+
+# Kill running instance
+pkill -f "wallpaper-dinamicos" 2>/dev/null || true
