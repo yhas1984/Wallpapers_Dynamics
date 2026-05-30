@@ -1088,6 +1088,15 @@ class WallpaperGUI(QWidget):
 
 
 def main():
+    # Ensure system can suspend (release any potential inhibitors)
+    try:
+        subprocess.run(
+            ["loginctl", "set-idle-hint", "yes"],
+            capture_output=True, timeout=2,
+        )
+    except Exception:
+        pass
+
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     app.setApplicationName("WallpaperDinamicos")
