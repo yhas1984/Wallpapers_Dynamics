@@ -1,18 +1,4 @@
 #!/bin/bash
-set -e
-
-# Update desktop database (with timeout)
-timeout 5 update-desktop-database -q /usr/share/applications 2>/dev/null || true
-
-# Update icon cache (with timeout)
-timeout 5 gtk-update-icon-cache -q -f /usr/share/icons/hicolor 2>/dev/null || true
-
-echo ""
-echo "╔══════════════════════════════════════════════╗"
-echo "║    Wallpaper Dinamicos instalado            ║"
-echo "╠══════════════════════════════════════════════╣"
-echo "║  Ejecuta:  wallpaper-dinamicos              ║"
-echo "║  Menu:     Aplicaciones > Utilidades        ║"
-echo "╚══════════════════════════════════════════════╝"
-echo ""
+echo "Wallpaper Dinamicos instalado correctamente."
+echo "Ejecuta: wallpaper-dinamicos"
 exit 0
