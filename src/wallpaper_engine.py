@@ -276,6 +276,7 @@ class WallpaperEngine:
             "--no-input-default-bindings",
             "--no-terminal",
             "--stop-screensaver=no",
+            "--hwdec=auto",
             f"--mute={'yes' if muted else 'no'}",
             f"--volume={volume}",
             f"--input-ipc-server={self._ipc_socket}",
@@ -371,10 +372,18 @@ class WallpaperEngine:
             self._display.close()
             self._display = None
 
-    def pause(self):
-        if self.is_running:
+    def pause(self, force=None):
+        if not self.is_running:
+            return
+        if force is not None:
+            self._send_ipc_command(["set_property", "pause", bool(force)])
+            self._is_paused = bool(force)
+        else:
             self._send_ipc_command(["cycle", "pause"])
             self._is_paused = not self._is_paused
+
+    def set_pause(self, paused):
+        self.pause(force=paused)
 
     def set_mute(self, muted):
         self._is_muted = muted

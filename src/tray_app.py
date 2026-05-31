@@ -157,13 +157,15 @@ class WallpaperGUI(QWidget):
         if self._use_frame_engine:
             self._wp_engine.hide()
         self._is_paused = False
+        self._manual_paused = False
         self._current_video = None
         self._auto_advance_timer = QTimer()
         self._auto_advance_timer.timeout.connect(self._auto_advance)
         self._current_info = {}
-        self._fullscreen_covered = False
+        self._fs_covered = False
         self._screen_locked = False
-        self._fs_paused = False
+        self._idle_active = False
+        self._idle_counter = 0
         self.setAcceptDrops(True)
 
         self.setWindowTitle("Wallpaper Dinamicos")
@@ -240,6 +242,7 @@ class WallpaperGUI(QWidget):
         self.volume_slider.setEnabled(not is_frame)
         self.btn_mute.setEnabled(not is_frame)
         self.mode_combo.setEnabled(not is_frame)
+        self.speed_slider.setEnabled(not is_frame)
         self.brightness_slider.setEnabled(not is_frame)
         self.contrast_slider.setEnabled(not is_frame)
         self.blur_slider.setEnabled(not is_frame)
@@ -249,6 +252,10 @@ class WallpaperGUI(QWidget):
             self.fs_cb.setEnabled(not is_frame)
         if hasattr(self, "lock_cb"):
             self.lock_cb.setEnabled(not is_frame)
+        if hasattr(self, "idle_cb"):
+            self.idle_cb.setEnabled(not is_frame)
+        if hasattr(self, "idle_spin"):
+            self.idle_spin.setEnabled(not is_frame)
 
     def _apply_stylesheet(self):
         dark = self.env["dark_mode"]
@@ -609,6 +616,20 @@ class WallpaperGUI(QWidget):
         vol_row.addWidget(self.vol_label)
         cl.addLayout(vol_row)
 
+        speed_row = QHBoxLayout()
+        speed_label = QLabel("Velocidad")
+        speed_label.setFixedWidth(55)
+        speed_row.addWidget(speed_label)
+        self.speed_slider = QSlider(Qt.Orientation.Horizontal)
+        self.speed_slider.setRange(25, 200)
+        self.speed_slider.setValue(int(self.config.get("speed", 1.0) * 100))
+        self.speed_slider.valueChanged.connect(self._on_speed)
+        speed_row.addWidget(self.speed_slider)
+        self.speed_label = QLabel(f"{self.config.get('speed', 1.0):.2f}x")
+        self.speed_label.setFixedWidth(36)
+        speed_row.addWidget(self.speed_label)
+        cl.addLayout(speed_row)
+
         cl.addWidget(self._sep())
 
         mode_row = QHBoxLayout()
@@ -646,6 +667,22 @@ class WallpaperGUI(QWidget):
         self.lock_cb.setChecked(self.config.get("pause_on_lock", True))
         self.lock_cb.toggled.connect(lambda v: self._set_config("pause_on_lock", v))
         cl.addWidget(self.lock_cb)
+
+        idle_row = QHBoxLayout()
+        self.idle_cb = QCheckBox("Pausar en inactividad")
+        self.idle_cb.setChecked(self.config.get("pause_on_idle", False))
+        self.idle_cb.toggled.connect(lambda v: self._set_config("pause_on_idle", v))
+        idle_row.addWidget(self.idle_cb)
+
+        self.idle_spin = QSpinBox()
+        self.idle_spin.setRange(10, 600)
+        self.idle_spin.setValue(self.config.get("idle_seconds", 30))
+        self.idle_spin.setSuffix("s")
+        self.idle_spin.setFixedWidth(60)
+        self.idle_spin.valueChanged.connect(lambda v: self._set_config("idle_seconds", v))
+        idle_row.addWidget(self.idle_spin)
+        idle_row.addStretch()
+        cl.addLayout(idle_row)
 
         if self.env["desktop"] == "deepin":
             self.icons_cb = QCheckBox("Mostrar iconos (experimental)")
@@ -998,10 +1035,8 @@ class WallpaperGUI(QWidget):
     def _toggle_pause(self):
         if not self.engine.is_running:
             return
-        self.engine.pause()
-        self._is_paused = not self._is_paused
-        icon = QStyle.StandardPixmap.SP_MediaPlay if self._is_paused else QStyle.StandardPixmap.SP_MediaPause
-        self.btn_play.setIcon(self.style().standardIcon(icon))
+        self._manual_paused = not self._manual_paused
+        self._apply_pause_state()
 
     def _stop(self):
         self.engine.stop()
@@ -1033,6 +1068,14 @@ class WallpaperGUI(QWidget):
             save_config(self.config)
             self.engine.set_mute(False)
 
+    def _on_speed(self, val):
+        speed = val / 100.0
+        self.config["speed"] = speed
+        save_config(self.config)
+        self.speed_label.setText(f"{speed:.2f}x")
+        if isinstance(self.engine, WallpaperEngine):
+            self.engine.set_speed(speed)
+
     def _setup_ewmh_atoms(self):
         d = self._xdisplay
         self._NET_CLIENT_LIST = d.intern_atom("_NET_CLIENT_LIST")
@@ -1047,81 +1090,95 @@ class WallpaperGUI(QWidget):
 
     def _check_fullscreen(self):
         if not self.config.get("pause_on_fullscreen", True):
-            if self._fs_paused:
-                self._set_fullscreen_pause(False)
+            self._fs_covered = False
+        else:
+            try:
+                prop = self._xroot.get_full_property(self._NET_CLIENT_LIST, Xatom.WINDOW)
+                covered = False
+                if prop:
+                    for wid in prop.value:
+                        try:
+                            win = self._xdisplay.create_resource_object("window", wid)
+                            type_prop = win.get_full_property(self._NET_WM_WINDOW_TYPE, Xatom.ATOM)
+                            is_system = False
+                            if type_prop:
+                                for atom in type_prop.value:
+                                    if atom in (self._NET_WM_WINDOW_TYPE_DESKTOP, self._NET_WM_WINDOW_TYPE_DOCK):
+                                        is_system = True
+                                        break
+                            if is_system:
+                                continue
+                            state_prop = win.get_full_property(self._NET_WM_STATE, Xatom.ATOM)
+                            if state_prop:
+                                is_hidden = False
+                                is_fs = False
+                                is_max_h = False
+                                is_max_v = False
+                                for atom in state_prop.value:
+                                    if atom == self._NET_WM_STATE_HIDDEN:
+                                        is_hidden = True
+                                    elif atom == self._NET_WM_STATE_FULLSCREEN:
+                                        is_fs = True
+                                    elif atom == self._NET_WM_STATE_MAXIMIZED_VERT:
+                                        is_max_v = True
+                                    elif atom == self._NET_WM_STATE_MAXIMIZED_HORZ:
+                                        is_max_h = True
+                                if is_hidden:
+                                    continue
+                                if is_fs or (is_max_h and is_max_v):
+                                    covered = True
+                                    break
+                        except Exception:
+                            continue
+                self._fs_covered = covered
+            except Exception:
+                pass
+
+        self._check_idle()
+        self._apply_pause_state()
+
+    def _check_idle(self):
+        idle_secs = self.config.get("idle_seconds", 30)
+        if not self.config.get("pause_on_idle", False) or idle_secs <= 0:
+            if self._idle_active:
+                self._idle_active = False
+                self._idle_counter = 0
             return
         try:
-            prop = self._xroot.get_full_property(self._NET_CLIENT_LIST, Xatom.WINDOW)
-            covered = False
-            if prop:
-                for wid in prop.value:
-                    try:
-                        win = self._xdisplay.create_resource_object("window", wid)
-                        type_prop = win.get_full_property(self._NET_WM_WINDOW_TYPE, Xatom.ATOM)
-                        is_system = False
-                        if type_prop:
-                            for atom in type_prop.value:
-                                if atom in (self._NET_WM_WINDOW_TYPE_DESKTOP, self._NET_WM_WINDOW_TYPE_DOCK):
-                                    is_system = True
-                                    break
-                        if is_system:
-                            continue
-                        state_prop = win.get_full_property(self._NET_WM_STATE, Xatom.ATOM)
-                        if state_prop:
-                            is_hidden = False
-                            is_fs = False
-                            is_max_h = False
-                            is_max_v = False
-                            for atom in state_prop.value:
-                                if atom == self._NET_WM_STATE_HIDDEN:
-                                    is_hidden = True
-                                elif atom == self._NET_WM_STATE_FULLSCREEN:
-                                    is_fs = True
-                                elif atom == self._NET_WM_STATE_MAXIMIZED_VERT:
-                                    is_max_v = True
-                                elif atom == self._NET_WM_STATE_MAXIMIZED_HORZ:
-                                    is_max_h = True
-                            if is_hidden:
-                                continue
-                            if is_fs or (is_max_h and is_max_v):
-                                covered = True
-                                break
-                    except Exception:
-                        continue
-            self._set_fullscreen_pause(covered)
+            from PyQt6.QtGui import QCursor
+            pos = QCursor.pos()
+            if not hasattr(self, "_last_idle_pos") or pos != self._last_idle_pos:
+                self._last_idle_pos = pos
+                self._idle_counter = 0
+                if self._idle_active:
+                    self._idle_active = False
+            else:
+                self._idle_counter += 2
+                if self._idle_counter >= idle_secs and not self._idle_active:
+                    self._idle_active = True
         except Exception:
             pass
 
-    def _set_fullscreen_pause(self, covered):
-        if covered == self._fullscreen_covered:
+    def _should_pause(self):
+        return self._manual_paused or self._fs_covered or self._screen_locked or self._idle_active
+
+    def _apply_pause_state(self):
+        if not isinstance(self.engine, WallpaperEngine):
             return
-        self._fullscreen_covered = covered
-        self._fs_paused = covered
-        if covered:
-            self._pause_if_possible()
-        else:
-            self._resume_if_possible()
+        if not self.engine.is_running:
+            return
+        should = self._should_pause()
+        if should != self._is_paused:
+            self.engine.set_pause(should)
+            self._is_paused = should
+            icon = QStyle.StandardPixmap.SP_MediaPlay if should else QStyle.StandardPixmap.SP_MediaPause
+            self.btn_play.setIcon(self.style().standardIcon(icon))
 
     def _on_lock_changed(self, locked):
         self._screen_locked = bool(locked)
         if not self.config.get("pause_on_lock", True):
-            return
-        if locked:
-            self._pause_if_possible()
-        else:
-            self._resume_if_possible()
-
-    def _pause_if_possible(self):
-        if self.engine.is_running and not self.engine.is_paused:
-            self.engine.pause()
-            self._is_paused = True
-            self.btn_play.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
-
-    def _resume_if_possible(self):
-        if self.engine.is_running and self.engine.is_paused and not self._fs_paused and not self._screen_locked:
-            self.engine.pause()
-            self._is_paused = False
-            self.btn_play.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
+            self._screen_locked = False
+        self._apply_pause_state()
 
     def _on_brightness(self, val):
         self.config["brightness"] = val
@@ -1139,14 +1196,18 @@ class WallpaperGUI(QWidget):
         self.engine.set_blur(val)
 
     def _reset_filters(self):
-        self.config.update({"brightness": 100, "contrast": 100, "blur": 0})
+        self.config.update({"brightness": 100, "contrast": 100, "blur": 0, "speed": 1.0})
         save_config(self.config)
         self.brightness_slider.setValue(100)
         self.contrast_slider.setValue(100)
         self.blur_slider.setValue(0)
+        self.speed_slider.setValue(100)
+        self.speed_label.setText("1.00x")
         self.engine.set_brightness(100)
         self.engine.set_contrast(100)
         self.engine.set_blur(0)
+        if isinstance(self.engine, WallpaperEngine):
+            self.engine.set_speed(1.0)
 
     def _toggle_autostart(self, checked):
         self.config["autostart"] = checked

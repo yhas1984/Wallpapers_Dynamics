@@ -25,6 +25,9 @@ DEFAULT_CONFIG = {
     "start_minimized": True,
     "pause_on_fullscreen": True,
     "pause_on_lock": True,
+    "pause_on_idle": False,
+    "idle_seconds": 30,
+    "speed": 1.0,
 }
 
 
