@@ -15,8 +15,8 @@
 **EN:** Download the `.deb` package from [GitHub Releases](https://github.com/yhas1984/Wallpapers_Dynamics/releases) and install:
 
 ```bash
-curl -LO https://github.com/yhas1984/Wallpapers_Dynamics/releases/download/v1.0.3/wallpaper-dinamicos-1.0.2.deb
-sudo dpkg -i wallpaper-dinamicos-1.0.2.deb
+curl -LO https://github.com/yhas1984/Wallpapers_Dynamics/releases/download/v1.0.3/wallpaper-dinamicos-1.0.3.deb
+sudo dpkg -i wallpaper-dinamicos-1.0.3.deb
 sudo apt install -f
 # Run: wallpaper-dinamicos
 ```
@@ -29,10 +29,16 @@ sudo apt install -f
 |----|----|
 | **Video como wallpaper** — reproduce MP4, WebM, MKV, AVI, MOV como fondo de escritorio | **Video wallpaper** — plays MP4, WebM, MKV, AVI, MOV as desktop background |
 | **Dos modos**: mpv embebido (X11, fluido) o frames vía D-Bus (X11/Wayland, con iconos) | **Two modes**: embedded mpv (X11, smooth) or D-Bus frames (X11/Wayland, with icons) |
+| **Detección NVIDIA** → `--gpu-api=vulkan` + `--vo=gpu-next` + `--hwdec=auto` | **NVIDIA detection** → Vulkan render, GPU decoding |
 | **Filtros en vivo**: brillo, contraste, blur (vía IPC mpv, sin reiniciar) | **Live filters**: brightness, contrast, blur (via mpv IPC, no restart) |
+| **Escala en vivo**: Fill / Fit / Stretch / Center (cambio instantáneo sin reinicio) | **Live scale**: Fill / Fit / Stretch / Center (instant switch, no restart) |
+| **Velocidad ajustable**: 0.25×–2× (slider en la UI) | **Speed control**: 0.25×–2× (UI slider) |
 | **Playlist** con auto-avance (5s–3600s) | **Playlist** with auto-advance (5s–3600s) |
 | **FPS configurables** 10–180 para modo iconos | **Configurable FPS** 10–180 for icon mode |
 | **Volumen**, mute, atajos de teclado | **Volume**, mute, keyboard shortcuts |
+| **Pausa automática** en pantalla completa o maximizada (X11 EWMH) | **Auto-pause** on fullscreen or maximized windows (X11 EWMH) |
+| **Pausa al bloquear** la pantalla (D-Bus SessionManager) | **Pause on screen lock** (D-Bus SessionManager) |
+| **Pausa por inactividad** (cursor quieto, configurable 10s–600s) | **Idle pause** (cursor still, configurable 10s–600s) |
 | **Drag & Drop** de videos | **Drag & Drop** videos |
 | **Inicio minimizado** en la bandeja | **Start minimized** to system tray |
 | **Tema adaptable** (oscuro/claro) | **Adaptive theme** (dark/light) |
@@ -47,9 +53,9 @@ sudo apt install -f
 
 ### Modo normal / Normal mode (no icons)
 
-**ES:** Usa mpv incrustado en una ventana X11. Video fluido a fps nativos, con filtros, audio y controles completos. Los iconos quedan debajo.
+**ES:** Usa mpv incrustado en una ventana X11 (OpenGL/Vulkan). Video fluido a fps nativos, con filtros (brillo, contraste, blur), velocidad ajustable, modos de escala, audio y controles completos. Incluye detección automática de NVIDIA para renderizado Vulkan. Pausa automática en pantalla completa, bloqueo de pantalla o inactividad.
 
-**EN:** Uses mpv embedded in an X11 window. Smooth video at native fps, with filters, audio and full controls. Desktop icons are hidden below.
+**EN:** Uses mpv embedded in an X11 window (OpenGL/Vulkan). Smooth video at native fps, with filters (brightness, contrast, blur), adjustable speed, scale modes, audio and full controls. Includes NVIDIA auto-detection for Vulkan rendering. Auto-pause on fullscreen, screen lock, or idle.
 
 ### Modo iconos / Icon mode (experimental, Deepin)
 
@@ -82,8 +88,8 @@ sudo dnf install mpv ffmpeg libnotify python3-qt6 python3-xlib python3-dbus
 ### Desde .deb (recomendado / recommended)
 
 ```bash
-curl -LO https://github.com/yhas1984/Wallpapers_Dynamics/releases/download/v1.0.3/wallpaper-dinamicos-1.0.2.deb
-sudo dpkg -i wallpaper-dinamicos-1.0.2.deb
+curl -LO https://github.com/yhas1984/Wallpapers_Dynamics/releases/download/v1.0.3/wallpaper-dinamicos-1.0.3.deb
+sudo dpkg -i wallpaper-dinamicos-1.0.3.deb
 sudo apt install -f
 wallpaper-dinamicos
 ```
@@ -133,10 +139,15 @@ Para iniciar con la ventana visible / To start with visible window:
 | `contrast` | int | `100` | Contraste (0–200) |
 | `saturation` | int | `100` | Saturación (0–200) |
 | `blur` | int | `0` | Desenfoque (0–20) |
+| `speed` | float | `1.0` | Velocidad (0.25–2.0) |
 | `playback_mode` | string | `"fill"` | Modo: fill/fit/stretch/center |
 | `playlist` | array | `[]` | Lista de videos / Video list |
 | `auto_advance` | bool | `false` | Avance automático / Auto-advance |
 | `auto_advance_seconds` | int | `30` | Intervalo (5–3600) |
+| `pause_on_fullscreen` | bool | `true` | Pausar en fullscreen |
+| `pause_on_lock` | bool | `true` | Pausar al bloquear |
+| `pause_on_idle` | bool | `false` | Pausar en inactividad |
+| `idle_seconds` | int | `30` | Tiempo inactividad (10–600s) |
 | `autostart` | bool | `false` | Iniciar con sesión / Start with session |
 | `show_icons` | bool | `false` | Modo iconos (Deepin) |
 | `frame_fps` | int | `30` | FPS modo iconos (10–180) |
