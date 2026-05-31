@@ -23,6 +23,8 @@ DEFAULT_CONFIG = {
     "frame_fps": 30,
     "show_icons": False,
     "start_minimized": True,
+    "pause_on_fullscreen": True,
+    "pause_on_lock": True,
 }
 
 

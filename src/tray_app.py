@@ -14,11 +14,18 @@ from PyQt6.QtGui import (
     QShortcut,
 )
 from PyQt6.QtCore import Qt, QTimer, QSize, QUrl
+from Xlib import X, display as xdisplay
+from Xlib import Xatom
 from .wallpaper_engine import WallpaperEngine, FrameWallpaperEngine, PLAYBACK_MODES
 from . import load_config, save_config
 from . import icons
 from .detector import detect_environment
 from .utils import get_video_info, format_duration, format_resolution, send_notification, generate_thumbnail
+
+try:
+    import dbus
+except Exception:
+    dbus = None
 
 
 class TitleBar(QWidget):
@@ -153,11 +160,10 @@ class WallpaperGUI(QWidget):
         self._current_video = None
         self._auto_advance_timer = QTimer()
         self._auto_advance_timer.timeout.connect(self._auto_advance)
-        self._mode_debounce = QTimer()
-        self._mode_debounce.setSingleShot(True)
-        self._mode_debounce.timeout.connect(self._apply_mode_debounce)
-        self._mode_debounce_val = None
         self._current_info = {}
+        self._fullscreen_covered = False
+        self._screen_locked = False
+        self._fs_paused = False
         self.setAcceptDrops(True)
 
         self.setWindowTitle("Wallpaper Dinamicos")
@@ -171,6 +177,27 @@ class WallpaperGUI(QWidget):
         self._fix_palette()
         self._apply_stylesheet()
         self._restore_geometry()
+
+        self._xdisplay = xdisplay.Display()
+        self._xroot = self._xdisplay.screen().root
+        self._setup_ewmh_atoms()
+
+        self._fullscreen_timer = QTimer()
+        self._fullscreen_timer.timeout.connect(self._check_fullscreen)
+        self._fullscreen_timer.start(2000)
+
+        if dbus is not None:
+            try:
+                bus = dbus.SessionBus()
+                bus.add_signal_receiver(
+                    self._on_lock_changed,
+                    dbus_interface="org.deepin.dde.SessionManager1",
+                    signal_name="LockedChanged",
+                    path="/org/deepin/dde/SessionManager1",
+                )
+            except Exception:
+                pass
+
         self._build_ui()
         self._setup_shortcuts()
         self._setup_tray()
@@ -218,6 +245,10 @@ class WallpaperGUI(QWidget):
         self.blur_slider.setEnabled(not is_frame)
         if hasattr(self, "fps_spin"):
             self.fps_spin.setEnabled(is_frame)
+        if hasattr(self, "fs_cb"):
+            self.fs_cb.setEnabled(not is_frame)
+        if hasattr(self, "lock_cb"):
+            self.lock_cb.setEnabled(not is_frame)
 
     def _apply_stylesheet(self):
         dark = self.env["dark_mode"]
@@ -606,6 +637,16 @@ class WallpaperGUI(QWidget):
         aa_row.addStretch()
         cl.addLayout(aa_row)
 
+        self.fs_cb = QCheckBox("Pausar en pantalla completa")
+        self.fs_cb.setChecked(self.config.get("pause_on_fullscreen", True))
+        self.fs_cb.toggled.connect(lambda v: self._set_config("pause_on_fullscreen", v))
+        cl.addWidget(self.fs_cb)
+
+        self.lock_cb = QCheckBox("Pausar al bloquear pantalla")
+        self.lock_cb.setChecked(self.config.get("pause_on_lock", True))
+        self.lock_cb.toggled.connect(lambda v: self._set_config("pause_on_lock", v))
+        cl.addWidget(self.lock_cb)
+
         if self.env["desktop"] == "deepin":
             self.icons_cb = QCheckBox("Mostrar iconos (experimental)")
             self.icons_cb.blockSignals(True)
@@ -809,6 +850,10 @@ class WallpaperGUI(QWidget):
         if self._use_frame_engine and self._frame_engine.is_running:
             self._frame_engine.set_fps(val)
 
+    def _set_config(self, key, val):
+        self.config[key] = val
+        save_config(self.config)
+
     def _on_auto_advance_toggled(self, checked):
         self.config["auto_advance"] = checked
         save_config(self.config)
@@ -831,10 +876,11 @@ class WallpaperGUI(QWidget):
 
     def _on_mode_changed(self, index):
         modes = ["fill", "fit", "stretch", "center"]
-        self.config["playback_mode"] = modes[index]
+        mode = modes[index]
+        self.config["playback_mode"] = mode
         save_config(self.config)
-        self._mode_debounce_val = modes[index]
-        self._mode_debounce.start(500)
+        if isinstance(self.engine, WallpaperEngine):
+            self.engine.set_playback_mode(mode)
 
     def _setup_tray(self):
         self.tray = None
@@ -987,9 +1033,95 @@ class WallpaperGUI(QWidget):
             save_config(self.config)
             self.engine.set_mute(False)
 
-    def _apply_mode_debounce(self):
-        if self._mode_debounce_val and self._current_video:
-            self.engine.update_filters({"playback_mode": self._mode_debounce_val})
+    def _setup_ewmh_atoms(self):
+        d = self._xdisplay
+        self._NET_CLIENT_LIST = d.intern_atom("_NET_CLIENT_LIST")
+        self._NET_WM_WINDOW_TYPE = d.intern_atom("_NET_WM_WINDOW_TYPE")
+        self._NET_WM_WINDOW_TYPE_DESKTOP = d.intern_atom("_NET_WM_WINDOW_TYPE_DESKTOP")
+        self._NET_WM_WINDOW_TYPE_DOCK = d.intern_atom("_NET_WM_WINDOW_TYPE_DOCK")
+        self._NET_WM_STATE = d.intern_atom("_NET_WM_STATE")
+        self._NET_WM_STATE_HIDDEN = d.intern_atom("_NET_WM_STATE_HIDDEN")
+        self._NET_WM_STATE_FULLSCREEN = d.intern_atom("_NET_WM_STATE_FULLSCREEN")
+        self._NET_WM_STATE_MAXIMIZED_VERT = d.intern_atom("_NET_WM_STATE_MAXIMIZED_VERT")
+        self._NET_WM_STATE_MAXIMIZED_HORZ = d.intern_atom("_NET_WM_STATE_MAXIMIZED_HORZ")
+
+    def _check_fullscreen(self):
+        if not self.config.get("pause_on_fullscreen", True):
+            if self._fs_paused:
+                self._set_fullscreen_pause(False)
+            return
+        try:
+            prop = self._xroot.get_full_property(self._NET_CLIENT_LIST, Xatom.WINDOW)
+            covered = False
+            if prop:
+                for wid in prop.value:
+                    try:
+                        win = self._xdisplay.create_resource_object("window", wid)
+                        type_prop = win.get_full_property(self._NET_WM_WINDOW_TYPE, Xatom.ATOM)
+                        is_system = False
+                        if type_prop:
+                            for atom in type_prop.value:
+                                if atom in (self._NET_WM_WINDOW_TYPE_DESKTOP, self._NET_WM_WINDOW_TYPE_DOCK):
+                                    is_system = True
+                                    break
+                        if is_system:
+                            continue
+                        state_prop = win.get_full_property(self._NET_WM_STATE, Xatom.ATOM)
+                        if state_prop:
+                            is_hidden = False
+                            is_fs = False
+                            is_max_h = False
+                            is_max_v = False
+                            for atom in state_prop.value:
+                                if atom == self._NET_WM_STATE_HIDDEN:
+                                    is_hidden = True
+                                elif atom == self._NET_WM_STATE_FULLSCREEN:
+                                    is_fs = True
+                                elif atom == self._NET_WM_STATE_MAXIMIZED_VERT:
+                                    is_max_v = True
+                                elif atom == self._NET_WM_STATE_MAXIMIZED_HORZ:
+                                    is_max_h = True
+                            if is_hidden:
+                                continue
+                            if is_fs or (is_max_h and is_max_v):
+                                covered = True
+                                break
+                    except Exception:
+                        continue
+            self._set_fullscreen_pause(covered)
+        except Exception:
+            pass
+
+    def _set_fullscreen_pause(self, covered):
+        if covered == self._fullscreen_covered:
+            return
+        self._fullscreen_covered = covered
+        self._fs_paused = covered
+        if covered:
+            self._pause_if_possible()
+        else:
+            self._resume_if_possible()
+
+    def _on_lock_changed(self, locked):
+        self._screen_locked = bool(locked)
+        if not self.config.get("pause_on_lock", True):
+            return
+        if locked:
+            self._pause_if_possible()
+        else:
+            self._resume_if_possible()
+
+    def _pause_if_possible(self):
+        if self.engine.is_running and not self.engine.is_paused:
+            self.engine.pause()
+            self._is_paused = True
+            self.btn_play.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPlay))
+
+    def _resume_if_possible(self):
+        if self.engine.is_running and self.engine.is_paused and not self._fs_paused and not self._screen_locked:
+            self.engine.pause()
+            self._is_paused = False
+            self.btn_play.setIcon(self.style().standardIcon(QStyle.StandardPixmap.SP_MediaPause))
 
     def _on_brightness(self, val):
         self.config["brightness"] = val
@@ -1037,7 +1169,12 @@ class WallpaperGUI(QWidget):
 
     def _quit(self):
         self._auto_advance_timer.stop()
-        self._mode_debounce.stop()
+        self._fullscreen_timer.stop()
+        if hasattr(self, "_xdisplay") and self._xdisplay:
+            try:
+                self._xdisplay.close()
+            except Exception:
+                pass
         self._wp_engine.cleanup()
         self._frame_engine.cleanup()
         self.app_ref.quit()

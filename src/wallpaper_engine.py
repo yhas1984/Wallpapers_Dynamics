@@ -21,11 +21,23 @@ except Exception:
 IPC_SOCKET = Path.home() / ".config" / "wallpaper-dinamicos" / "mpv-socket"
 
 PLAYBACK_MODES = {
-    "fill": "--panscan=1.0",
-    "fit": "--panscan=0.0 --keepaspect=yes",
-    "stretch": "--panscan=0.0 --keepaspect=no",
-    "center": "--panscan=0.0 --keepaspect=yes --video-align-x=0 --video-align-y=0",
+    "fill": {"keepaspect": True, "panscan": 1.0},
+    "fit": {"keepaspect": True, "panscan": 0.0},
+    "stretch": {"keepaspect": False, "panscan": 0.0},
+    "center": {"keepaspect": True, "panscan": 0.0, "video-align-x": 0, "video-align-y": 0},
 }
+
+def _mode_to_cmd_args(mode):
+    props = PLAYBACK_MODES.get(mode, PLAYBACK_MODES["fill"])
+    args = []
+    args.append("--keepaspect=yes" if props.get("keepaspect", True) else "--keepaspect=no")
+    panscan = props.get("panscan", 0.0)
+    if panscan:
+        args.append(f"--panscan={panscan}")
+    for key in ("video-align-x", "video-align-y"):
+        if key in props:
+            args.append(f"--{key}={props[key]}")
+    return args
 
 GSETTINGS_SCHEMA = "com.deepin.dde.appearance"
 GSETTINGS_KEY = "background-uris"
@@ -269,7 +281,7 @@ class WallpaperEngine:
             f"--input-ipc-server={self._ipc_socket}",
         ]
 
-        mode_args = PLAYBACK_MODES.get(mode, PLAYBACK_MODES["fill"]).split()
+        mode_args = _mode_to_cmd_args(mode)
         cmd.extend(mode_args)
 
         if blur > 0:
@@ -395,8 +407,23 @@ class WallpaperEngine:
                 self._send_ipc_command(["set_property", "vf", ""])
                 self._send_ipc_command(["vf", "clr"])
 
+    def set_playback_mode(self, mode):
+        self._filters["playback_mode"] = mode
+        props = PLAYBACK_MODES.get(mode, PLAYBACK_MODES["fill"])
+        if not self.is_running:
+            return
+        self._send_ipc_command(["set_property", "keepaspect", props.get("keepaspect", True)])
+        self._send_ipc_command(["set_property", "panscan", props.get("panscan", 0.0)])
+        for key in ("video-align-x", "video-align-y"):
+            if key in props:
+                self._send_ipc_command(["set_property", key, props[key]])
+
+    def set_speed(self, speed):
+        self._filters["speed"] = speed
+        if self.is_running:
+            self._send_ipc_command(["set_property", "speed", speed])
+
     def update_filters(self, filters):
-        needs_restart = False
         for k, v in filters.items():
             if k == "brightness":
                 self.set_brightness(v)
@@ -404,12 +431,10 @@ class WallpaperEngine:
                 self.set_contrast(v)
             elif k == "blur":
                 self.set_blur(v)
+            elif k == "playback_mode":
+                self.set_playback_mode(v)
             else:
                 self._filters[k] = v
-                if k == "playback_mode":
-                    needs_restart = True
-        if needs_restart and self._current_video:
-            self.start(self._current_video)
 
     @property
     def is_running(self):
