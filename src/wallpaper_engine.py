@@ -39,6 +39,35 @@ def _mode_to_cmd_args(mode):
             args.append(f"--{key}={props[key]}")
     return args
 
+def _detect_gpu():
+    try:
+        r = subprocess.run(
+            ["nvidia-smi", "--query-gpu=name", "--format=csv,noheader"],
+            capture_output=True, text=True, timeout=2,
+        )
+        if r.returncode == 0 and r.stdout.strip():
+            return "nvidia"
+    except Exception:
+        pass
+    try:
+        r = subprocess.run(
+            ["glxinfo", "-B"],
+            capture_output=True, text=True, timeout=3,
+        )
+        for line in r.stdout.splitlines():
+            if "OpenGL vendor" in line:
+                vendor = line.split(":")[-1].strip().lower()
+                if "nvidia" in vendor:
+                    return "nvidia"
+                if "amd" in vendor or "ati" in vendor or "advanced micro" in vendor:
+                    return "amd"
+                if "intel" in vendor:
+                    return "intel"
+                return vendor.split()[-1]
+    except Exception:
+        pass
+    return "unknown"
+
 GSETTINGS_SCHEMA = "com.deepin.dde.appearance"
 GSETTINGS_KEY = "background-uris"
 
@@ -265,6 +294,9 @@ class WallpaperEngine:
         muted = self._filters.get("muted", True)
         mode = self._filters.get("playback_mode", "fill")
         blur = self._filters.get("blur", 0)
+        gpu = _detect_gpu()
+        if gpu not in self._filters:
+            self._filters["gpu"] = gpu
 
         cmd = [
             "mpv",
@@ -277,6 +309,8 @@ class WallpaperEngine:
             "--no-terminal",
             "--stop-screensaver=no",
             "--hwdec=auto",
+            "--vo=gpu-next",
+            f"--gpu-api={'vulkan' if gpu == 'nvidia' else 'auto'}",
             f"--mute={'yes' if muted else 'no'}",
             f"--volume={volume}",
             f"--input-ipc-server={self._ipc_socket}",
