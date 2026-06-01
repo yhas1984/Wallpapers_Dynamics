@@ -16,7 +16,7 @@
 
 ```bash
 curl -LO https://github.com/yhas1984/Wallpapers_Dynamics/releases/download/v1.1.0/wallpaper-dinamicos-1.1.0.deb
-sudo dpkg -i wallpaper-dinamicos-1.0.3.deb
+sudo dpkg -i wallpaper-dinamicos-1.1.0.deb
 sudo apt install -f
 # Run: wallpaper-dinamicos
 ```
@@ -95,7 +95,7 @@ sudo dnf install mpv ffmpeg libnotify python3-qt6 python3-xlib python3-dbus
 
 ```bash
 curl -LO https://github.com/yhas1984/Wallpapers_Dynamics/releases/download/v1.1.0/wallpaper-dinamicos-1.1.0.deb
-sudo dpkg -i wallpaper-dinamicos-1.0.3.deb
+sudo dpkg -i wallpaper-dinamicos-1.1.0.deb
 sudo apt install -f
 wallpaper-dinamicos
 ```
