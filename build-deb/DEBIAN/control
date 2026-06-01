@@ -1,5 +1,5 @@
 Package: wallpaper-dinamicos
-Version: 1.0.3
+Version: 1.1.0
 Section: utils
 Priority: optional
 Architecture: amd64
@@ -11,5 +11,6 @@ Description: Video wallpaper player for Linux
  .
  Incluye modo iconos para Deepin (dde-shell),
  control por bandeja del sistema, playlist,
- filtros en vivo (brillo, contraste, blur)
- y auto-inicio con la sesion.
+ filtros en vivo (brillo, contraste, blur),
+ auto-inicio con la sesion, y soporte Wayland
+ con frame extraction (gsettings, xfconf, plasma-apply-wallpaperimage).
