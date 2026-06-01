@@ -42,7 +42,7 @@ sudo apt install -f
 | **Drag & Drop** de videos | **Drag & Drop** videos |
 | **Inicio minimizado** en la bandeja | **Start minimized** to system tray |
 | **Tema adaptable** (oscuro/claro) | **Adaptive theme** (dark/light) |
-| **Cross-desktop**: Deepin, KDE, GNOME, XFCE, Cinnamon | **Cross-desktop**: Deepin, KDE, GNOME, XFCE, Cinnamon |
+| **Cross-desktop**: Deepin, KDE, GNOME, XFCE, Cinnamon (X11 + Wayland) | **Cross-desktop**: Deepin, KDE, GNOME, XFCE, Cinnamon (X11 + Wayland) |
 | **No inhibe suspensión** del sistema | **Does not prevent** system suspend |
 | **Auto-inicio** con la sesión | **Auto-start** with session |
 | **PyQt6** con QSS moderno | **PyQt6** with modern QSS |
@@ -181,16 +181,62 @@ Para iniciar con la ventana visible / To start with visible window:
 
 ---
 
+## Changelog
+
+### v1.1.0 — Wayland support (2026-06-01)
+
+**ES:**
+- **Soporte Wayland** con auto-detección: en Wayland se usa solo el modo de extracción de frames
+- **FrameWallpaperEngine** ahora es cross-desktop con backends por DE:
+  - `gsettings` (Deepin, GNOME, Cinnamon)
+  - `plasma-apply-wallpaperimage` (KDE)
+  - `xfconf-query` (XFCE)
+- **Inits de X11 protegidos**: imports de Xlib movidos a lazy, `WallpaperEngine` con `init_window=False` por defecto, captura de excepciones
+- **Checkbox "Mostrar iconos"** visible en todos los DEs (no solo Deepin) cuando se detecta Wayland
+- **Bloqueo de cambio a mpv** en Wayland o cuando X11 no está disponible
+
+**EN:**
+- **Wayland support** with auto-detection: on Wayland only frame extraction mode is used
+- **FrameWallpaperEngine** is now cross-desktop with per-DE backends:
+  - `gsettings` (Deepin, GNOME, Cinnamon)
+  - `plasma-apply-wallpaperimage` (KDE)
+  - `xfconf-query` (XFCE)
+- **X11 init hardening**: Xlib imports moved to lazy loading, `WallpaperEngine` defaults to `init_window=False`, exception capture
+- **"Show icons" checkbox** visible in all DEs (not just Deepin) when Wayland is detected
+- **mpv switch blocked** on Wayland or when X11 is unavailable
+
+### v1.0.3 — Bug fixes (2026-05-31)
+
+- Fix `prerm` que mataba dpkg durante install/remove (`pkill -f` → `pkill -x`)
+- Detección automática de GPU NVIDIA → `--gpu-api=vulkan` + `--vo=gpu-next`
+- Slider de velocidad 0.25×–2× en UI
+- Detección de inactividad con pausa configurable
+- Estado de pausa centralizado (manual + fullscreen + lock + idle)
+
+### v1.0.0–v1.0.2
+
+- Modo mpv embebido (X11) con filtros, velocidad, escala
+- Modo frames (D-Bus) para Deepin con iconos visibles
+- Detección de pantalla completa via EWMH
+- Pausa al bloquear pantalla
+- Drag & Drop, playlist, auto-avance
+
+---
+
 ## Solución de problemas / Troubleshooting
 
 | ES | EN |
 |----|----|
-| **El video no se muestra** → verifica X11 (`echo $XDG_SESSION_TYPE`), ejecuta desde terminal | **Video not showing** → check X11, run from terminal |
+| **En Wayland: solo modo iconos** (mpv no funciona) — es por diseño | **On Wayland: only icon mode** (mpv not supported) — by design |
+| **No detecta Wayland** → verificar `echo $XDG_SESSION_TYPE` debe ser `wayland` | **Wayland not detected** → check `echo $XDG_SESSION_TYPE` should be `wayland` |
+| **GNOME/KDE/XFCE en Wayland: ¿funciona?** → Sí, modo iconos automático | **GNOME/KDE/XFCE on Wayland: does it work?** → Yes, automatic icon mode |
+| **El video no se muestra** → ejecuta desde terminal para ver errores | **Video not showing** → run from terminal to see errors |
 | **No suspende** → `--stop-screensaver=no` ya configurado | **System won't suspend** → `--stop-screensaver=no` already set |
 | **Iconos no visibles** → Deepin V23+ con dde-shell, subir FPS | **Icons not visible** → Deepin V23+ with dde-shell, increase FPS |
 | **No restaura desde bandeja** → clic simple (no doble) en Deepin | **Won't restore from tray** → single click (not double) on Deepin |
 | **"cannot connect to X server"** → ejecutar desde sesión gráfica | → run from a graphical session |
 | **Error PyQt6** → `sudo apt install python3-pyqt6` | → install PyQt6 system package |
+| **KDE Wayland: wallpaper no cambia** → verificar `plasma-apply-wallpaperimage` instalado | **KDE Wayland: wallpaper not changing** → check `plasma-apply-wallpaperimage` installed |
 
 ---
 
