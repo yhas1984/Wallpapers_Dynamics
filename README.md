@@ -15,7 +15,7 @@
 **EN:** Download the `.deb` package from [GitHub Releases](https://github.com/yhas1984/Wallpapers_Dynamics/releases) and install:
 
 ```bash
-curl -LO https://github.com/yhas1984/Wallpapers_Dynamics/releases/download/v1.0.3/wallpaper-dinamicos-1.0.3.deb
+curl -LO https://github.com/yhas1984/Wallpapers_Dynamics/releases/download/v1.1.0/wallpaper-dinamicos-1.1.0.deb
 sudo dpkg -i wallpaper-dinamicos-1.0.3.deb
 sudo apt install -f
 # Run: wallpaper-dinamicos
@@ -57,11 +57,17 @@ sudo apt install -f
 
 **EN:** Uses mpv embedded in an X11 window (OpenGL/Vulkan). Smooth video at native fps, with filters (brightness, contrast, blur), adjustable speed, scale modes, audio and full controls. Includes NVIDIA auto-detection for Vulkan rendering. Auto-pause on fullscreen, screen lock, or idle.
 
-### Modo iconos / Icon mode (experimental, Deepin)
+### Modo iconos / Icon mode (cross-desktop, X11 + Wayland)
 
-**ES:** Extrae frames con ffmpeg y los muestra vía D-Bus (`SetCurrentWorkspaceBackground`). Los iconos del escritorio quedan visibles. Sin audio/filtros. FPS 10–180. X11 y Wayland.
+**ES:** Extrae frames con ffmpeg y los pone como wallpaper del escritorio según el DE detectado. Los iconos quedan visibles. Sin audio/filtros. FPS 10–180. Soporta X11 y Wayland de forma nativa. Backends usados: `gsettings` (Deepin, GNOME, Cinnamon), `xfconf-query` (XFCE), `plasma-apply-wallpaperimage` (KDE). En Wayland la app se auto-configura en este modo (mpv embebido no es posible en Wayland).
 
-**EN:** Extracts frames with ffmpeg and displays them via D-Bus (`SetCurrentWorkspaceBackground`). Desktop icons remain visible. No audio/filters. FPS 10–180. X11 and Wayland.
+**EN:** Extracts frames with ffmpeg and sets them as the desktop wallpaper according to the detected DE. Desktop icons remain visible. No audio/filters. FPS 10–180. Supports X11 and Wayland natively. Backends used: `gsettings` (Deepin, GNOME, Cinnamon), `xfconf-query` (XFCE), `plasma-apply-wallpaperimage` (KDE). On Wayland the app auto-configures to this mode (embedded mpv is not possible in Wayland).
+
+### Soporte Wayland / Wayland support
+
+**ES:** La app detecta automáticamente si está corriendo en X11 o Wayland. En Wayland **solo** se usa el modo de extracción de frames (mpv no puede embeberse en Wayland). En X11 se usan ambos modos según preferencia. La detección de pantalla completa via EWMH solo funciona en X11; en Wayland esa función se desactiva.
+
+**EN:** The app auto-detects whether it's running in X11 or Wayland. On Wayland only frame extraction is used (mpv cannot embed in Wayland). On X11 both modes are available. Fullscreen detection via EWMH only works on X11; on Wayland this feature is disabled.
 
 ---
 
@@ -88,7 +94,7 @@ sudo dnf install mpv ffmpeg libnotify python3-qt6 python3-xlib python3-dbus
 ### Desde .deb (recomendado / recommended)
 
 ```bash
-curl -LO https://github.com/yhas1984/Wallpapers_Dynamics/releases/download/v1.0.3/wallpaper-dinamicos-1.0.3.deb
+curl -LO https://github.com/yhas1984/Wallpapers_Dynamics/releases/download/v1.1.0/wallpaper-dinamicos-1.1.0.deb
 sudo dpkg -i wallpaper-dinamicos-1.0.3.deb
 sudo apt install -f
 wallpaper-dinamicos
@@ -149,7 +155,7 @@ Para iniciar con la ventana visible / To start with visible window:
 | `pause_on_idle` | bool | `false` | Pausar en inactividad |
 | `idle_seconds` | int | `30` | Tiempo inactividad (10–600s) |
 | `autostart` | bool | `false` | Iniciar con sesión / Start with session |
-| `show_icons` | bool | `false` | Modo iconos (Deepin) |
+| `show_icons` | bool | `false` | Modo iconos (Deepin/Wayland siempre activo) |
 | `frame_fps` | int | `30` | FPS modo iconos (10–180) |
 | `start_minimized` | bool | `true` | Inicio minimizado / Start minimized |
 

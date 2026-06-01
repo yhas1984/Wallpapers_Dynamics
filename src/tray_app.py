@@ -14,8 +14,6 @@ from PyQt6.QtGui import (
     QShortcut,
 )
 from PyQt6.QtCore import Qt, QTimer, QSize, QUrl
-from Xlib import X, display as xdisplay
-from Xlib import Xatom
 from .wallpaper_engine import WallpaperEngine, FrameWallpaperEngine, PLAYBACK_MODES
 from . import load_config, save_config
 from . import icons
@@ -150,11 +148,18 @@ class WallpaperGUI(QWidget):
     def __init__(self, env):
         super().__init__()
         self.env = env
+        self._is_wayland = env.get("display_server") == "wayland"
         self.config = load_config()
-        self._wp_engine = WallpaperEngine(desktop=env["desktop"])
-        self._frame_engine = FrameWallpaperEngine()
-        self._use_frame_engine = self.config.get("show_icons", False) if env["desktop"] == "deepin" else False
-        if self._use_frame_engine:
+        self._wp_engine = WallpaperEngine(desktop=env["desktop"], init_window=False)
+        self._frame_engine = FrameWallpaperEngine(desktop=env["desktop"])
+        if self._is_wayland:
+            self._use_frame_engine = True
+        else:
+            self._use_frame_engine = (
+                self.config.get("show_icons", False)
+                if env["desktop"] == "deepin" else False
+            )
+        if self._use_frame_engine and self._wp_engine is not None:
             self._wp_engine.hide()
         self._is_paused = False
         self._manual_paused = False
@@ -180,13 +185,20 @@ class WallpaperGUI(QWidget):
         self._apply_stylesheet()
         self._restore_geometry()
 
-        self._xdisplay = xdisplay.Display()
-        self._xroot = self._xdisplay.screen().root
-        self._setup_ewmh_atoms()
-
-        self._fullscreen_timer = QTimer()
-        self._fullscreen_timer.timeout.connect(self._check_fullscreen)
-        self._fullscreen_timer.start(2000)
+        self._xdisplay = None
+        self._xroot = None
+        if not self._is_wayland:
+            try:
+                from Xlib import display as xdisplay
+                self._xdisplay = xdisplay.Display()
+                self._xroot = self._xdisplay.screen().root
+                self._setup_ewmh_atoms()
+                self._fullscreen_timer = QTimer()
+                self._fullscreen_timer.timeout.connect(self._check_fullscreen)
+                self._fullscreen_timer.start(2000)
+            except Exception:
+                self._xdisplay = None
+                self._xroot = None
 
         if dbus is not None:
             try:
@@ -212,22 +224,31 @@ class WallpaperGUI(QWidget):
 
     @property
     def engine(self):
-        return self._frame_engine if self._use_frame_engine else self._wp_engine
+        if self._use_frame_engine or self._wp_engine is None:
+            return self._frame_engine
+        return self._wp_engine
 
     def _switch_engine_mode(self, use_frame):
         if use_frame == self._use_frame_engine:
             return
+        if not use_frame and (self._wp_engine is None or not self._wp_engine.available):
+            return
         current_video = self._current_video
 
-        self._wp_engine.stop()
-        self._wp_engine._destroy_window()
+        if self._wp_engine is not None:
+            self._wp_engine.stop()
+            self._wp_engine._destroy_window()
         self._frame_engine.cleanup(skip_restore=True)
 
         self._use_frame_engine = use_frame
         self._update_controls_for_mode()
 
-        if not use_frame:
-            self._wp_engine._setup_window()
+        if not use_frame and self._wp_engine is not None:
+            try:
+                if not self._wp_engine.available:
+                    self._wp_engine._setup_window()
+            except Exception:
+                pass
 
         if current_video and os.path.isfile(current_video):
             if use_frame:
@@ -684,7 +705,7 @@ class WallpaperGUI(QWidget):
         idle_row.addStretch()
         cl.addLayout(idle_row)
 
-        if self.env["desktop"] == "deepin":
+        if self.env["desktop"] == "deepin" or self._is_wayland:
             self.icons_cb = QCheckBox("Mostrar iconos (experimental)")
             self.icons_cb.blockSignals(True)
             self.icons_cb.setChecked(self._use_frame_engine)
@@ -1077,6 +1098,9 @@ class WallpaperGUI(QWidget):
             self.engine.set_speed(speed)
 
     def _setup_ewmh_atoms(self):
+        if not self._xdisplay:
+            return
+        from Xlib import Xatom
         d = self._xdisplay
         self._NET_CLIENT_LIST = d.intern_atom("_NET_CLIENT_LIST")
         self._NET_WM_WINDOW_TYPE = d.intern_atom("_NET_WM_WINDOW_TYPE")
@@ -1089,10 +1113,13 @@ class WallpaperGUI(QWidget):
         self._NET_WM_STATE_MAXIMIZED_HORZ = d.intern_atom("_NET_WM_STATE_MAXIMIZED_HORZ")
 
     def _check_fullscreen(self):
-        if not self.config.get("pause_on_fullscreen", True):
+        if not self._xdisplay or not self._xroot:
+            self._fs_covered = False
+        elif not self.config.get("pause_on_fullscreen", True):
             self._fs_covered = False
         else:
             try:
+                from Xlib import Xatom
                 prop = self._xroot.get_full_property(self._NET_CLIENT_LIST, Xatom.WINDOW)
                 covered = False
                 if prop:
@@ -1230,13 +1257,18 @@ class WallpaperGUI(QWidget):
 
     def _quit(self):
         self._auto_advance_timer.stop()
-        self._fullscreen_timer.stop()
+        if hasattr(self, "_fullscreen_timer"):
+            try:
+                self._fullscreen_timer.stop()
+            except Exception:
+                pass
         if hasattr(self, "_xdisplay") and self._xdisplay:
             try:
                 self._xdisplay.close()
             except Exception:
                 pass
-        self._wp_engine.cleanup()
+        if self._wp_engine is not None:
+            self._wp_engine.cleanup()
         self._frame_engine.cleanup()
         self.app_ref.quit()
 

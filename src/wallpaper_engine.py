@@ -84,13 +84,22 @@ class WallpaperEngine:
         self._is_muted = True
         self._ipc_ready = False
         self._original_wallpaper = None
+        self._available = False
         if init_window:
-            self._display = display.Display()
-            self._screen = self._display.screen()
-            self._root = self._screen.root
-            self._setup_window()
+            try:
+                self._display = display.Display()
+                self._screen = self._display.screen()
+                self._root = self._screen.root
+                self._setup_window()
+                self._available = True
+            except Exception:
+                self._display = None
+                self._screen = None
+                self._root = None
         else:
             self._display = None
+            self._screen = None
+            self._root = None
 
     def _get_screen_geometry(self):
         return self._screen.width_in_pixels, self._screen.height_in_pixels
@@ -492,6 +501,10 @@ class WallpaperEngine:
         return self._current_video
 
     @property
+    def available(self):
+        return self._available
+
+    @property
     def mode(self):
         return "video"
 
@@ -512,10 +525,41 @@ class WallpaperEngine:
                 pass
 
 
+DE_SCHEMAS = {
+    "deepin": {
+        "type": "gsettings_uri_list",
+        "schema": "com.deepin.dde.appearance",
+        "key": "background-uris",
+        "dbus": True,
+    },
+    "gnome": {
+        "type": "gsettings_string",
+        "schema": "org.gnome.desktop.background",
+        "key": "picture-uri",
+    },
+    "kde": {
+        "type": "command",
+        "command": ["plasma-apply-wallpaperimage"],
+    },
+    "xfce": {
+        "type": "xfconf",
+        "channel": "xfce4-desktop",
+        "property": "/backdrop/screen0/monitor0/workspace0/last-image",
+    },
+    "cinnamon": {
+        "type": "gsettings_string",
+        "schema": "org.cinnamon.desktop.background",
+        "key": "picture-uri",
+    },
+}
+
+
 class FrameWallpaperEngine:
     MAX_FRAMES = 2000
 
-    def __init__(self):
+    def __init__(self, desktop="unknown"):
+        self._desktop = desktop if desktop in DE_SCHEMAS else "deepin"
+        self._de_config = DE_SCHEMAS[self._desktop]
         self._running = False
         self._last_uri = None
         self._ffmpeg_proc = None
@@ -654,23 +698,40 @@ class FrameWallpaperEngine:
         if uri == self._last_uri:
             return
         self._last_uri = uri
+
+        kind = self._de_config["type"]
         try:
-            subprocess.run(
-                ["gsettings", "set", GSETTINGS_SCHEMA, GSETTINGS_KEY,
-                 f"['{uri}']"],
-                capture_output=True, timeout=1,
-            )
-        except Exception:
-            pass
-        try:
-            subprocess.run(
-                ["dbus-send", "--session", "--dest=org.deepin.dde.Appearance1",
-                 "--type=method_call", "--print-reply",
-                 "/org/deepin/dde/Appearance1",
-                 "org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground",
-                 f"string:{uri}"],
-                capture_output=True, timeout=1,
-            )
+            if kind == "gsettings_uri_list":
+                subprocess.run(
+                    ["gsettings", "set", self._de_config["schema"],
+                     self._de_config["key"], f"['{uri}']"],
+                    capture_output=True, timeout=1,
+                )
+                if self._de_config.get("dbus"):
+                    subprocess.run(
+                        ["dbus-send", "--session",
+                         "--dest=org.deepin.dde.Appearance1",
+                         "--type=method_call", "--print-reply",
+                         "/org/deepin/dde/Appearance1",
+                         "org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground",
+                         f"string:{uri}"],
+                        capture_output=True, timeout=1,
+                    )
+            elif kind == "gsettings_string":
+                subprocess.run(
+                    ["gsettings", "set", self._de_config["schema"],
+                     self._de_config["key"], uri],
+                    capture_output=True, timeout=1,
+                )
+            elif kind == "command":
+                cmd = list(self._de_config["command"]) + [str(path)]
+                subprocess.run(cmd, capture_output=True, timeout=2)
+            elif kind == "xfconf":
+                subprocess.run(
+                    ["xfconf-query", "-c", self._de_config["channel"],
+                     "-p", self._de_config["property"], "-s", str(path)],
+                    capture_output=True, timeout=1,
+                )
         except Exception:
             pass
 
@@ -701,40 +762,84 @@ class FrameWallpaperEngine:
             pass
 
     def _save_wallpaper(self):
+        kind = self._de_config["type"]
         try:
-            r = subprocess.run(
-                ["gsettings", "get", GSETTINGS_SCHEMA, GSETTINGS_KEY],
-                capture_output=True, text=True, timeout=2,
-            )
-            if r.returncode == 0:
-                val = r.stdout.strip()
-                if not val.startswith("@as"):
-                    self._original_wallpaper = val
+            if kind == "gsettings_uri_list":
+                r = subprocess.run(
+                    ["gsettings", "get", self._de_config["schema"],
+                     self._de_config["key"]],
+                    capture_output=True, text=True, timeout=2,
+                )
+                if r.returncode == 0:
+                    val = r.stdout.strip()
+                    if not val.startswith("@as"):
+                        self._original_wallpaper = val
+            elif kind == "gsettings_string":
+                r = subprocess.run(
+                    ["gsettings", "get", self._de_config["schema"],
+                     self._de_config["key"]],
+                    capture_output=True, text=True, timeout=2,
+                )
+                if r.returncode == 0:
+                    val = r.stdout.strip().strip("'\"")
+                    if val and not val.startswith("@"):
+                        self._original_wallpaper = val
+            elif kind == "xfconf":
+                r = subprocess.run(
+                    ["xfconf-query", "-c", self._de_config["channel"],
+                     "-p", self._de_config["property"]],
+                    capture_output=True, text=True, timeout=2,
+                )
+                if r.returncode == 0:
+                    val = r.stdout.strip()
+                    if val:
+                        self._original_wallpaper = val
         except Exception:
             pass
 
     def _restore_wallpaper(self):
-        if self._original_wallpaper:
-            uri = self._original_wallpaper.strip("[]").strip("'\"")
-            try:
-                subprocess.run(
-                    ["gsettings", "set", GSETTINGS_SCHEMA, GSETTINGS_KEY,
-                     f"['{uri}']"],
-                    capture_output=True, timeout=1,
-                )
-            except Exception:
+        if not self._original_wallpaper:
+            return
+        uri = self._original_wallpaper.strip("[]").strip("'\"")
+        kind = self._de_config["type"]
+        try:
+            if kind == "gsettings_uri_list":
                 try:
                     subprocess.run(
-                        ["dbus-send", "--session", "--dest=org.deepin.dde.Appearance1",
-                         "--type=method_call", "--print-reply",
-                         "/org/deepin/dde/Appearance1",
-                         "org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground",
-                         f"string:{uri}"],
+                        ["gsettings", "set", self._de_config["schema"],
+                         self._de_config["key"], f"['{uri}']"],
                         capture_output=True, timeout=1,
                     )
                 except Exception:
                     pass
-            self._original_wallpaper = None
+                if self._de_config.get("dbus"):
+                    try:
+                        subprocess.run(
+                            ["dbus-send", "--session",
+                             "--dest=org.deepin.dde.Appearance1",
+                             "--type=method_call", "--print-reply",
+                             "/org/deepin/dde/Appearance1",
+                             "org.deepin.dde.Appearance1.SetCurrentWorkspaceBackground",
+                             f"string:{uri}"],
+                            capture_output=True, timeout=1,
+                        )
+                    except Exception:
+                        pass
+            elif kind == "gsettings_string":
+                subprocess.run(
+                    ["gsettings", "set", self._de_config["schema"],
+                     self._de_config["key"], uri],
+                    capture_output=True, timeout=1,
+                )
+            elif kind == "xfconf":
+                subprocess.run(
+                    ["xfconf-query", "-c", self._de_config["channel"],
+                     "-p", self._de_config["property"], "-s", uri],
+                    capture_output=True, timeout=1,
+                )
+        except Exception:
+            pass
+        self._original_wallpaper = None
 
     @property
     def is_running(self):
@@ -751,6 +856,10 @@ class FrameWallpaperEngine:
     @property
     def mode(self):
         return "frame"
+
+    @property
+    def desktop(self):
+        return self._desktop
 
     def pause(self):
         pass
